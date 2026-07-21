@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: registry-search
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      # Generated once by Render and kept across restarts, so a redeploy
+      # doesn't sign everyone out.
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MAX_UPLOAD_MB
+        value: "300"
+      # Uncomment and set a value to require a shared password.
+      # - key: APP_PASSWORD
+      #   sync: false

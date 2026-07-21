@@ -1,0 +1,10 @@
+# For running on a normal machine or a hosting platform.
+# No pandas — lxml does the streaming parse, the rest is the standard library.
+Flask>=3.0
+lxml>=5.0
+waitress>=3.0
+
+# Only needed if genuine .xlsx / .xls files are fed in. The registry portal's
+# .xls exports are HTML and need neither.
+openpyxl>=3.1
+xlrd==2.0.1
