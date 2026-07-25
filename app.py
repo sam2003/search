@@ -16,20 +16,17 @@ import io
 import os
 import re
 import csv
-import sys
 import uuid
 import codecs
 import socket
 import shutil
 import tempfile
-import hmac
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from lxml import etree
 from flask import (Flask, Request, request, jsonify, render_template_string,
-                   Response, make_response, stream_with_context, session,
-                   redirect, url_for)
+                   Response, make_response, stream_with_context)
 
 # ============================================================================
 # CONFIG — edit this block only
@@ -43,11 +40,6 @@ PORT = int(os.environ.get("PORT", "5000"))
 # Largest single upload accepted. Uploads stream to disk and never sit in RAM,
 # so this guards disk rather than memory. Only matters on a public URL.
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "300"))
-
-# Leave empty for no login (fine on a LAN). Set the APP_PASSWORD environment
-# variable on the host to require one shared password, entered once per
-# browser and remembered for 30 days.
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 # Safety limit on rows held in RAM during one search. This is the only thing
 # in the program whose memory cost grows with your data. Measured on this data:
@@ -64,40 +56,26 @@ READ_CHUNK = 64 * 1024
 # Set to True to collapse them instead.
 MERGE_DUPLICATES = False
 
-# Columns offered as filters, in the order they appear in the UI.
-#   type "text"   -> case-insensitive "contains" box
-#   type "number" -> min / max pair
-#   type "date"   -> from / to pair
-#   loose: True   -> ignores spaces, quotes and braces when matching (good for
-#                    Marathi party names that are exported without spaces)
+# Columns offered as filters, in the order they appear in the UI. Each is a
+# case-insensitive "contains" box.
+#   loose: True -> ignores spaces, quotes and braces when matching (good for
+#                  Marathi party names that are exported without spaces)
 FILTERS = [
-    {"col": "docno",                  "label": "Document no",        "type": "text"},
-    {"col": "internaldocumentnumber", "label": "Internal doc no",    "type": "text"},
-    {"col": "sellerparty",            "label": "Seller",             "type": "text", "loose": True},
-    {"col": "purchaserparty",         "label": "Purchaser",          "type": "text", "loose": True},
-    {"col": "propertydescription",    "label": "Property contains",  "type": "text", "loose": True},
-    {"col": "areaname",               "label": "Area",               "type": "text"},
-    {"col": "docname",                "label": "Document type",      "type": "text"},
-    {"col": "sroname",                "label": "SRO",                "type": "text"},
-    {"col": "srocode",                "label": "SRO code",           "type": "text"},
-    {"col": "status",                 "label": "Status",             "type": "text"},
-    {"col": "registrationdate",       "label": "Registration date",  "type": "date"},
-    {"col": "consideration_amt",      "label": "Consideration",      "type": "number"},
-    {"col": "marketvalue",            "label": "Market value",       "type": "number"},
+    {"col": "docno",               "label": "Document no",       "type": "text"},
+    {"col": "docname",             "label": "Document type",     "type": "text"},
+    {"col": "sellerparty",         "label": "Seller",            "type": "text", "loose": True},
+    {"col": "purchaserparty",      "label": "Purchaser",         "type": "text", "loose": True},
+    {"col": "propertydescription", "label": "Property contains", "type": "text", "loose": True},
 ]
 
 # Columns shown in the results table, in order. Leave empty to show everything.
 DISPLAY_COLUMNS = [
     "docno", "registrationdate", "docname", "areaname", "sroname",
     "sellerparty", "purchaserparty", "propertydescription",
-    "consideration_amt", "marketvalue", "stampdutypaid", "registrationfees",
 ]
 
 # Columns rendered as long text with a "more" toggle instead of one line.
 LONG_TEXT_COLUMNS = ["propertydescription", "sellerparty", "purchaserparty"]
-
-# Formats tried when reading a date column, first match wins.
-DATE_FORMATS = ["%d/%m/%Y", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y", "%Y-%m-%d"]
 
 FILE_EXTENSIONS = (".xls", ".xlsx", ".xlsm", ".csv", ".htm", ".html")
 
@@ -106,30 +84,10 @@ FILE_EXTENSIONS = (".xls", ".xlsx", ".xlsm", ".csv", ".htm", ".html")
 # ============================================================================
 
 _LOOSE_RE = re.compile(r'[\s"\'{}\[\]().,\-_/]')
-_NUM_RE = re.compile(r"[^0-9.\-]")
 
 
 def loose(s):
     return _LOOSE_RE.sub("", s).lower()
-
-
-def to_number(s):
-    try:
-        return float(_NUM_RE.sub("", str(s)))
-    except (ValueError, TypeError):
-        return None
-
-
-def to_date(s):
-    s = s.strip()
-    if not s:
-        return None
-    for fmt in DATE_FORMATS:
-        try:
-            return datetime.strptime(s, fmt).date()
-        except ValueError:
-            continue
-    return None
 
 
 def clean(s):
@@ -271,34 +229,6 @@ def build_predicates(params, header):
             else:
                 preds.append(lambda row, i=i, n=val.lower(): n in cell(row, i).lower())
 
-        elif f["type"] == "number":
-            lo = to_number(params.get(col + "__min", "") or "")
-            hi = to_number(params.get(col + "__max", "") or "")
-            if lo is None and hi is None:
-                continue
-
-            def num_test(row, i=i, lo=lo, hi=hi):
-                v = to_number(cell(row, i))
-                if v is None:
-                    return False
-                return (lo is None or v >= lo) and (hi is None or v <= hi)
-            preds.append(num_test)
-
-        elif f["type"] == "date":
-            raw_lo = params.get(col + "__from", "")
-            raw_hi = params.get(col + "__to", "")
-            lo = datetime.strptime(raw_lo, "%Y-%m-%d").date() if raw_lo else None
-            hi = datetime.strptime(raw_hi, "%Y-%m-%d").date() if raw_hi else None
-            if lo is None and hi is None:
-                continue
-
-            def date_test(row, i=i, lo=lo, hi=hi):
-                d = to_date(cell(row, i))
-                if d is None:
-                    return False
-                return (lo is None or d >= lo) and (hi is None or d <= hi)
-            preds.append(date_test)
-
     return preds
 
 
@@ -343,7 +273,7 @@ def run_search(paths, params, dedupe=False, cap=None):
                     if len(matches) >= cap:
                         truncated = True
                         break
-                    matches.append([cell(raw, i) if i >= 0 else "" for i in take] + [name])
+                    matches.append([cell(raw, i) if i >= 0 else "" for i in take])
 
             notes.append({"file": name, "rows": rows_here, "ok": True})
         except Exception as exc:
@@ -356,7 +286,7 @@ def run_search(paths, params, dedupe=False, cap=None):
             break
 
     return {
-        "columns": (columns or []) + ["_source_file"],
+        "columns": columns or [],
         "matches": matches,
         "scanned": scanned,
         "truncated": truncated,
@@ -380,17 +310,12 @@ class DiskRequest(Request):
 
 app = Flask(__name__)
 app.request_class = DiskRequest
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
-app.permanent_session_lifetime = timedelta(days=30)
 # Marathi text as raw UTF-8 rather than \uXXXX escapes — roughly halves the
 # size of every response, in RAM and on the wire.
 app.json.ensure_ascii = False
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# Behind a platform's HTTPS proxy, trust the forwarded scheme so cookies are
-# marked Secure correctly.
+# Behind a platform's HTTPS proxy, trust the forwarded scheme.
 if os.environ.get("BEHIND_PROXY", "1") == "1":
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -410,27 +335,20 @@ def set_sid_cookie(resp, sid):
     return resp
 
 
-def session_dir(sid):
-    d = os.path.join(UPLOAD_DIR, sid)
-    os.makedirs(d, exist_ok=True)
-    return d
-
-
 def drop_session(sid):
-    s = SESSIONS.pop(sid, None)
-    if s and s.get("dir"):
-        shutil.rmtree(s["dir"], ignore_errors=True)
+    SESSIONS.pop(sid, None)
+    shutil.rmtree(os.path.join(UPLOAD_DIR, sid), ignore_errors=True)
 
 
-def add_to_session(sid, new_paths, updir):
-    """Selections accumulate: drop a folder, then add loose files, and all of
-    them are searched together."""
+def set_session_paths(sid, new_paths, updir):
+    """A fresh selection REPLACES the previous one. Old uploaded copies are
+    deleted so a removed set can't linger in later searches."""
     with _lock:
-        s = SESSIONS.get(sid) or {"paths": [], "dir": updir}
-        s["paths"] = list(s.get("paths") or []) + list(new_paths)
-        s["dir"] = updir
-        s["touched"] = datetime.now()
-        SESSIONS[sid] = s
+        old = SESSIONS.get(sid)
+        if old and old.get("dir") and old["dir"] != updir:
+            shutil.rmtree(old["dir"], ignore_errors=True)
+        SESSIONS[sid] = {"paths": list(new_paths), "dir": updir,
+                         "touched": datetime.now()}
         while len(SESSIONS) > MAX_SESSIONS:
             oldest = min(SESSIONS, key=lambda k: SESSIONS[k]["touched"])
             drop_session(oldest)
@@ -459,39 +377,19 @@ def save_upload(fs, dest):
         shutil.copyfileobj(fs.stream, out, READ_CHUNK)
 
 
+@app.route("/ads.txt")
+def ads_txt():
+    return Response(
+        "google.com, pub-5876158560001890, DIRECT, f08c47fec0942fa0\n",
+        mimetype="text/plain",
+    )
+
+
 @app.route("/healthz")
 def healthz():
     """Cheap endpoint for an uptime pinger. Keeping this warm every 10 minutes
     stops a free-tier host from sleeping and wiping everyone's uploads."""
     return "ok", 200
-
-
-@app.before_request
-def require_password():
-    """No-op unless APP_PASSWORD is set on the host."""
-    if not APP_PASSWORD:
-        return None
-    if request.endpoint in ("login", "healthz") or request.path == "/login":
-        return None
-    if session.get("ok"):
-        return None
-    if request.path.startswith("/api/"):
-        return jsonify({"error": "Session expired — reload the page and sign in."}), 401
-    return redirect(url_for("login", next=request.path))
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if not APP_PASSWORD:
-        return redirect(url_for("index"))
-    error = ""
-    if request.method == "POST":
-        if hmac.compare_digest(request.form.get("password", ""), APP_PASSWORD):
-            session["ok"] = True
-            session.permanent = True
-            return redirect(request.args.get("next") or url_for("index"))
-        error = "That password is not right."
-    return render_template_string(LOGIN_PAGE, error=error), (401 if error else 200)
 
 
 @app.route("/")
@@ -506,8 +404,10 @@ def index():
 def api_select():
     """Record where the files are. Nothing is read or parsed here."""
     sid = get_sid(request)
-    updir = session_dir(sid)
-    existing = (get_session(sid) or {}).get("paths") or []
+    # A new upload replaces the old set, so give it its own directory; the
+    # previous one is deleted in set_session_paths.
+    updir = os.path.join(UPLOAD_DIR, sid, uuid.uuid4().hex)
+    os.makedirs(updir, exist_ok=True)
     paths = []
 
 
@@ -515,7 +415,7 @@ def api_select():
         base = os.path.basename(fs.filename or "")
         if not base or base.startswith("~$") or not base.lower().endswith(FILE_EXTENSIONS):
             continue
-        dest = os.path.join(updir, f"{len(existing) + len(paths):04d}-{base}")
+        dest = os.path.join(updir, f"{len(paths):04d}-{base}")
         save_upload(fs, dest)
         paths.append(dest)
 
@@ -523,8 +423,8 @@ def api_select():
         return jsonify({"error": "Nothing usable in that selection — looking for "
                                  + ", ".join(FILE_EXTENSIONS) + "."}), 400
 
-    add_to_session(sid, paths, updir)
-    all_paths = (get_session(sid) or {}).get("paths") or []
+    set_session_paths(sid, paths, updir)
+    all_paths = paths
     return set_sid_cookie(jsonify({
         "files": len(all_paths),
         "names": [os.path.basename(p).split("-", 1)[-1] for p in all_paths][:400],
@@ -588,7 +488,7 @@ def api_export():
                         take = [header.index(c) for c in cols]
                         preds = build_predicates(params, header)
                         if not header_written:
-                            w.writerow(cols + ["_source_file"])
+                            w.writerow(cols)
                             header_written = True
                         continue
                     if all(p(raw) for p in preds):
@@ -597,7 +497,7 @@ def api_export():
                             if h in seen:
                                 continue
                             seen.add(h)
-                        w.writerow([cell(raw, i) for i in take] + [name])
+                        w.writerow([cell(raw, i) for i in take])
                         if buf.tell() > 32768:
                             yield buf.getvalue()
                             buf.seek(0)
@@ -626,39 +526,6 @@ def api_clear():
 # Page
 # ============================================================================
 
-LOGIN_PAGE = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mahajan &amp; Associates</title>
-<style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f3ef;
-       color:#16161a;font-family:"Segoe UI",Inter,system-ui,sans-serif;font-size:14px}
-  form{background:#fff;border:1px solid #e6e4dc;padding:34px 32px;width:320px}
-  h1{margin:0 0 4px;font-size:14px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
-  .sub{font-family:Georgia,serif;font-style:italic;color:#8b8b83;margin-bottom:24px;font-size:13px}
-  label{display:block;font-size:9.5px;font-family:ui-monospace,Consolas,monospace;
-        text-transform:uppercase;letter-spacing:.1em;color:#8b8b83;margin-bottom:5px}
-  input{width:100%;padding:7px 0;border:0;border-bottom:1px solid #d3d0c6;background:transparent;
-        font-size:15px;color:#16161a}
-  input:focus{outline:0;border-bottom:2px solid #2c4a6e;margin-bottom:-1px}
-  button{width:100%;margin-top:22px;padding:10px;border:1px solid #16161a;background:#16161a;
-         color:#fff;font-size:12.5px;font-weight:600;letter-spacing:.03em;cursor:pointer}
-  button:hover{background:#2c4a6e;border-color:#2c4a6e}
-  .err{color:#8f3a26;font-size:12.5px;margin-top:14px}
-</style></head>
-<body>
-  <form method="post">
-    <h1>Mahajan &amp; Associates</h1>
-    <div class="sub">Registry Search</div>
-    <label for="p">Password</label>
-    <input id="p" name="password" type="password" autofocus autocomplete="current-password">
-    <button type="submit">Sign in</button>
-    {% if error %}<div class="err">{{ error }}</div>{% endif %}
-  </form>
-</body></html>
-"""
-
-
 PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -667,157 +534,164 @@ PAGE = r"""<!doctype html>
 <title>Mahajan &amp; Associates — Registry Search</title>
 <style>
   :root{
-    --ink:#16161a; --ink-soft:#3c3d42; --muted:#8b8b83;
-    --paper:#f4f3ef; --sheet:#ffffff; --well:#fbfaf7;
-    --line:#e6e4dc; --line-2:#f0eee8; --line-3:#d3d0c6;
-    --accent:#2c4a6e; --accent-soft:#eef1f5; --mark:#f7e9ae;
-    --warn:#8f3a26; --warn-soft:#faf0ec;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-    --sans:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+    /* high-contrast, everything legible at a glance */
+    --ink:#101418;          /* near-black body text          */
+    --ink-2:#2a3138;        /* secondary text, still dark     */
+    --muted:#5a6470;        /* labels — dark enough to read   */
+    --paper:#eae7df;        /* page                           */
+    --sheet:#ffffff;        /* cards                          */
+    --well:#f5f3ee;
+    --line:#c7c3b8;         /* visible borders                */
+    --line-2:#dcd9cf;
+    --navy:#173453;         /* structural accent              */
+    --navy-2:#22496f;
+    --navy-tint:#e5ecf3;
+    --gold:#8a5a12;         /* highlight marks, sparing        */
+    --gold-tint:#f6e6bf;
+    --warn:#8a2f1c;
+    --warn-tint:#f6e3dc;
+    --sans:"Segoe UI",Roboto,Inter,system-ui,-apple-system,sans-serif;
+    --serif:Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
   }
   *{box-sizing:border-box}
-  html,body{height:auto}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
-       font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+       font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;
        font-variant-numeric:tabular-nums}
 
-  /* two horizontal bands */
-  .app{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;
-       min-height:100vh;padding:0 22px 22px;max-width:1720px;margin:0 auto}
-  .sheet{background:var(--sheet);border:1px solid var(--line);display:flex;
-         flex-direction:column;min-width:0}
-  .results{min-height:420px}
+  .app{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;
+       min-height:100vh;padding:0 26px 26px;max-width:1720px;margin:0 auto}
+  .sheet{background:var(--sheet);border:1px solid var(--line);
+         display:flex;flex-direction:column;min-width:0}
 
-  /* masthead */
-  .masthead{display:flex;align-items:baseline;gap:12px;padding:20px 2px 14px;
-            border-bottom:1px solid var(--line-3)}
-  .masthead h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.16em;
-               text-transform:uppercase}
-  .masthead h1 .amp{font-family:Georgia,"Times New Roman",serif;font-style:italic;
-                    font-weight:400;letter-spacing:0;font-size:17px;
-                    color:var(--accent);padding:0 1px}
-  .masthead .rule{flex:1;height:1px;background:var(--line-3);align-self:center}
-  .signature{font-size:10.5px;color:var(--muted);letter-spacing:.02em;
-             white-space:nowrap}
-  .signature .by{font-family:var(--mono);font-size:9px;text-transform:uppercase;
-                 letter-spacing:.18em}
-  .signature .who{font-family:Georgia,"Times New Roman",serif;font-style:italic;
-                  font-size:13px;color:var(--ink-soft);letter-spacing:.01em;
-                  margin-left:7px}
+  /* ---------- masthead: both names clearly visible ---------- */
+  .masthead{padding:26px 4px 18px;border-bottom:3px double var(--navy)}
+  .masthead .firm{font-family:var(--serif);font-size:30px;font-weight:700;
+                  color:var(--ink);letter-spacing:.01em;line-height:1.1}
+  .masthead .firm .amp{color:var(--navy-2);font-style:italic;padding:0 2px}
+  .masthead .strap{display:flex;align-items:baseline;gap:12px;margin-top:8px}
+  .masthead .tool{font-family:var(--mono);font-size:12px;text-transform:uppercase;
+                  letter-spacing:.22em;color:var(--navy-2);font-weight:600}
+  .masthead .by{margin-left:auto;font-size:14px;color:var(--ink-2)}
+  .masthead .by b{font-family:var(--serif);font-style:italic;font-weight:700;
+                  color:var(--ink);font-size:16px}
 
-  /* band 1 */
-  .qgrid{display:grid;grid-template-columns:296px minmax(0,1fr)}
-  .src{padding:18px 20px;border-right:1px solid var(--line-2)}
-  .filters{padding:18px 22px;min-width:0}
+  /* ---------- band 1 ---------- */
+  .qgrid{display:grid;grid-template-columns:326px minmax(0,1fr)}
+  .src{padding:22px 24px;border-right:1px solid var(--line-2)}
+  .filters{padding:22px 26px;min-width:0}
 
-  .cap{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
-       letter-spacing:.16em;color:var(--muted);display:flex;align-items:center;
-       gap:10px;margin-bottom:12px}
-  .cap .n{margin-left:auto;color:var(--accent);letter-spacing:.04em}
-  .cap .hint{text-transform:none;letter-spacing:.02em;font-family:var(--sans);
-             font-size:11.5px;color:var(--muted)}
+  .cap{font-family:var(--mono);font-size:12px;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--navy-2);font-weight:700;
+       display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .cap .n{margin-left:auto;color:var(--ink);letter-spacing:.02em;
+          background:var(--navy-tint);padding:2px 9px;border:1px solid var(--line-2);
+          font-size:12px}
+  .cap .hint{text-transform:none;letter-spacing:0;font-family:var(--sans);
+             font-size:13px;color:var(--muted);font-weight:400}
 
-  .drop{border:1px dashed var(--line-3);background:var(--well);padding:22px 14px;
+  .drop{border:2px dashed var(--line);background:var(--well);padding:26px 16px;
         text-align:center;cursor:pointer;display:block;width:100%;font:inherit;
-        color:inherit;transition:border-color .12s, background .12s}
-  .drop:hover{border-color:var(--accent);background:var(--accent-soft)}
-  .drop.over{border-color:var(--accent);background:var(--accent-soft);border-style:solid}
-  .drop .big{font-weight:550;font-size:13px;display:block;letter-spacing:.01em}
-  .drop .small{font-size:11.5px;color:var(--muted);display:block;margin-top:3px}
-  .drop svg{opacity:.4;margin-bottom:8px}
+        color:var(--ink);transition:border-color .12s, background .12s}
+  .drop:hover{border-color:var(--navy);background:var(--navy-tint)}
+  .drop.over{border-color:var(--navy);background:var(--navy-tint);border-style:solid}
+  .drop .big{font-weight:600;font-size:16px;display:block}
+  .drop .small{font-size:13.5px;color:var(--muted);display:block;margin-top:4px}
+  .drop svg{opacity:.55;margin-bottom:9px}
 
-  .chips{margin-top:14px;max-height:112px;overflow:auto;font-family:var(--mono);
-         font-size:11px;color:var(--ink-soft)}
-  .chip{padding:4px 0;border-bottom:1px solid var(--line-2);display:flex;gap:8px}
+  .chips{margin-top:16px;max-height:150px;overflow:auto;font-size:13.5px;
+         color:var(--ink-2)}
+  .chip{padding:6px 0;border-bottom:1px solid var(--line-2);display:flex;gap:8px}
   .chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .chip em{margin-left:auto;color:var(--muted);font-style:normal;flex:none}
 
-  /* fields */
-  label{display:block;font-size:9.5px;font-family:var(--mono);text-transform:uppercase;
-        letter-spacing:.1em;color:var(--muted);margin-bottom:5px}
-  input[type=text],input[type=number],input[type=date],select{
-    width:100%;padding:7px 0;border:0;border-bottom:1px solid var(--line-3);
-    background:transparent;font-family:inherit;font-size:13.5px;color:var(--ink);
-    border-radius:0;transition:border-color .12s}
-  input:hover{border-bottom-color:var(--muted)}
-  input:focus,select:focus{outline:0;border-bottom-color:var(--accent);
-                           border-bottom-width:2px;margin-bottom:-1px}
-  input::placeholder{color:#b6b6ae}
-  .drop:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .field{margin-bottom:15px}
-  .pair{display:flex;gap:14px}
-  .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:0 22px}
-  .fgrid .span2{grid-column:span 2}
-  .any{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line-2)}
-  .any input{font-size:15px;padding:6px 0}
+  label{display:block;font-size:12.5px;font-family:var(--mono);text-transform:uppercase;
+        letter-spacing:.08em;color:var(--muted);margin-bottom:6px;font-weight:600}
+  input[type=text]{
+    width:100%;padding:11px 13px;border:1.5px solid var(--line);
+    background:#fff;font-family:inherit;font-size:16px;color:var(--ink);border-radius:2px}
+  input::placeholder{color:#9aa1a8}
+  input:focus,.drop:focus-visible,button:focus-visible{
+    outline:2.5px solid var(--navy);outline-offset:1px;border-color:var(--navy)}
+  .field{margin-bottom:16px}
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 20px}
+  .any{margin-bottom:20px;padding-bottom:18px;border-bottom:2px solid var(--line-2)}
+  .any input{font-size:17px;padding:12px 14px}
+  .any label{font-size:13px;color:var(--navy-2)}
 
-  button{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:9px 20px;
-         border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;
-         border-radius:0;letter-spacing:.03em;transition:.12s;white-space:nowrap}
-  button:hover:not(:disabled){background:var(--accent);border-color:var(--accent)}
-  button.ghost{background:transparent;color:var(--ink-soft);border-color:var(--line-3)}
-  button.ghost:hover:not(:disabled){background:var(--accent-soft);color:var(--accent);
-                                    border-color:var(--accent)}
-  button.link{background:none;border:0;color:var(--accent);padding:0;font-size:10.5px;
-              font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;
-              border-bottom:1px solid currentColor;font-weight:500}
+  button{font-family:var(--sans);font-size:15px;font-weight:600;padding:12px 24px;
+         border:1.5px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;
+         border-radius:2px;letter-spacing:.02em;transition:.12s}
+  button:hover:not(:disabled){background:var(--navy-2);border-color:var(--navy-2)}
+  button.ghost{background:#fff;color:var(--navy);border-color:var(--navy)}
+  button.ghost:hover:not(:disabled){background:var(--navy-tint)}
+  button.link{background:none;border:0;color:var(--navy-2);padding:0;font-size:13px;
+              font-family:var(--sans);text-decoration:underline;text-underline-offset:3px;
+              font-weight:600;letter-spacing:0}
   button.link:hover:not(:disabled){background:none;color:var(--ink)}
-  button:disabled{opacity:.35;cursor:not-allowed}
+  button:disabled{opacity:.4;cursor:not-allowed}
 
-  .actions{display:flex;gap:10px;align-items:center;padding:13px 20px;
+  .actions{display:flex;gap:12px;align-items:center;padding:16px 24px;
            border-top:1px solid var(--line);background:var(--well)}
-  .actions .msg{font-size:11.5px;color:var(--muted);margin-left:auto;
-                text-align:right;font-family:var(--mono)}
+  .actions .msg{font-size:14px;color:var(--ink-2);margin-left:auto;text-align:right}
 
-  /* band 2 */
-  .bar{display:flex;align-items:baseline;gap:14px;padding:14px 20px;
-       border-bottom:1px solid var(--line);flex-wrap:wrap}
-  .bar h2{margin:0;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
-          letter-spacing:.16em;color:var(--muted);font-weight:500}
-  .tally{font-size:17px;font-weight:600;letter-spacing:-.015em}
-  .tally b{font-weight:600}
-  .tally span{color:var(--muted);font-weight:400;font-size:13px}
-  .stat{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:auto;
-        letter-spacing:.02em}
-  .flash{padding:10px 20px;background:var(--warn-soft);color:var(--warn);
-         font-size:12.5px;border-bottom:1px solid var(--line)}
+  /* ---------- band 2: results ---------- */
+  .bar{display:flex;align-items:baseline;gap:16px;padding:16px 24px;
+       border-bottom:2px solid var(--line);flex-wrap:wrap;background:var(--well)}
+  .bar h2{margin:0;font-family:var(--mono);font-size:12px;text-transform:uppercase;
+          letter-spacing:.16em;color:var(--navy-2);font-weight:700}
+  .tally{font-size:21px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+  .tally span{color:var(--muted);font-weight:400;font-size:15px}
+  .stat{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-left:auto}
+  .flash{padding:12px 24px;background:var(--warn-tint);color:var(--warn);
+         font-size:14px;border-bottom:1px solid var(--line);font-weight:500}
 
-  .tablewrap{overflow-x:auto;min-width:0}
-  table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
-  th{position:sticky;top:0;background:var(--sheet);text-align:left;padding:11px 14px;
-     border-bottom:1px solid var(--line-3);font-family:var(--mono);font-size:9.5px;
-     text-transform:uppercase;letter-spacing:.11em;white-space:nowrap;z-index:2;
-     color:var(--muted);font-weight:500}
-  td{padding:11px 14px;border-bottom:1px solid var(--line-2);vertical-align:top}
-  tbody tr:hover td{background:var(--accent-soft)}
-  td.num{text-align:right;font-family:var(--mono);white-space:nowrap;font-size:12.5px}
-  td.long{max-width:340px;min-width:190px;color:var(--ink-soft)}
-  .clip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .more{font-size:10px;font-family:var(--mono);color:var(--accent);cursor:pointer;
-        background:none;border:0;padding:3px 0 0;letter-spacing:.06em;text-transform:uppercase}
-  mark{background:var(--mark);color:inherit;padding:0 2px}
+  .tablewrap{min-width:0}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:15px;
+        table-layout:fixed}
+  /* explicit shares so nothing overflows; party columns kept compact,
+     property given the most room, short columns trimmed to what they need */
+  col.c-docno{width:7%}
+  col.c-registrationdate{width:8%}
+  col.c-docname{width:9%}
+  col.c-areaname{width:8%}
+  col.c-sroname{width:11%}
+  col.c-sellerparty{width:15%}
+  col.c-purchaserparty{width:15%}
+  col.c-propertydescription{width:27%}
+  th{position:sticky;top:0;background:var(--navy);text-align:left;padding:13px 16px;
+     border-bottom:2px solid var(--navy);font-family:var(--sans);font-size:12.5px;
+     text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;z-index:2;
+     color:#fff;font-weight:600}
+  td{padding:13px 16px;border-bottom:1px solid var(--line-2);vertical-align:top;
+     color:var(--ink);line-height:1.5;white-space:normal;
+     overflow-wrap:break-word;word-break:break-word}
+  tbody tr:nth-child(even) td{background:var(--well)}
+  tbody tr:hover td{background:var(--navy-tint)}
+  td.party, td.prop{font-size:13.5px;line-height:1.45}
+  mark{background:var(--gold-tint);color:var(--ink);padding:0 2px;font-weight:600}
 
-  .pager{display:flex;gap:10px;align-items:center;padding:11px 20px;margin-top:auto;
-         border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;
-         color:var(--muted);letter-spacing:.03em}
-  .pager button{padding:5px 12px;font-size:11px}
-  .pager select{width:auto;padding:2px 4px;font-size:11px;font-family:var(--mono)}
+  .pager{display:flex;gap:12px;align-items:center;padding:14px 24px;
+         border-top:1px solid var(--line);font-size:14px;color:var(--ink-2)}
+  .pager button{padding:8px 15px;font-size:14px}
+  .pager select{padding:6px 8px;font-size:14px;border:1.5px solid var(--line);
+                background:#fff;color:var(--ink);border-radius:2px}
+  .pager b{color:var(--ink)}
 
-  .blank{flex:1;min-height:280px;display:grid;place-content:center;text-align:center;padding:44px;
-         color:var(--muted);gap:7px;max-width:420px;margin:0 auto}
-  .blank .t{font-size:14px;font-weight:600;color:var(--ink-soft);letter-spacing:.02em}
-  .blank .s{font-size:12.5px;line-height:1.6}
-  .blank .glyph{font-family:var(--mono);font-size:11px;letter-spacing:.3em;
-                color:var(--line-3);margin-bottom:4px}
-  .err{color:var(--warn)}
+  .blank{flex:1;min-height:300px;display:grid;place-content:center;text-align:center;
+         padding:48px;color:var(--ink-2);gap:9px;max-width:460px;margin:0 auto}
+  .blank .t{font-size:18px;font-weight:700;color:var(--ink)}
+  .blank .s{font-size:15px;line-height:1.65;color:var(--muted)}
+  .blank .glyph{font-family:var(--serif);font-size:34px;color:var(--line);margin-bottom:2px}
+  .err{color:var(--warn);font-weight:600}
   .hide{display:none!important}
-  .spin{display:inline-block;width:9px;height:9px;border:1.5px solid var(--line-3);
-        border-top-color:var(--accent);border-radius:50%;animation:sp .6s linear infinite;
-        vertical-align:0;margin-right:7px}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);
+        border-top-color:var(--navy);border-radius:50%;animation:sp .6s linear infinite;
+        vertical-align:-1px;margin-right:8px}
   @keyframes sp{to{transform:rotate(360deg)}}
 
-  @media (max-width:900px){
-    .app{padding:0 14px 14px}
+  @media (max-width:920px){
+    .app{padding:0 16px 16px}
     .qgrid{grid-template-columns:1fr}
     .src{border-right:0;border-bottom:1px solid var(--line-2)}
   }
@@ -827,11 +701,11 @@ PAGE = r"""<!doctype html>
 <div class="app">
 
   <header class="masthead">
-    <h1>Mahajan <span class="amp">&amp;</span> Associates</h1>
-    <span class="rule"></span>
-    <span class="signature">
-      <span class="by">Built by</span><span class="who">Siddhant Mahalank</span>
-    </span>
+    <div class="firm">Mahajan <span class="amp">&amp;</span> Associates</div>
+    <div class="strap">
+      <span class="tool">Registry Search</span>
+      <span class="by">Built by <b>Siddhant Mahalank</b></span>
+    </div>
   </header>
 
   <!-- band 1 — files and filters -->
@@ -842,8 +716,8 @@ PAGE = r"""<!doctype html>
         <div class="cap">Files <span class="n" id="filecount"></span></div>
 
         <button type="button" class="drop" id="drop">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
@@ -855,38 +729,28 @@ PAGE = r"""<!doctype html>
 
         <div class="chips" id="chips"></div>
         <div style="margin-top:12px">
-          <button type="button" class="link hide" id="clearfiles">clear all</button>
+          <button type="button" class="link hide" id="clearfiles">Clear all files</button>
         </div>
       </div>
 
       <div class="filters">
         <div class="cap">Filters
           <span class="hint">every box is optional</span>
-          <button type="button" class="link n" id="clearfilters">reset</button>
+          <button type="button" class="link n" id="clearfilters">Reset</button>
         </div>
 
         <div class="any">
           <div class="field" style="margin:0">
-            <label for="_all">Any column</label>
-            <input type="text" id="_all" placeholder="word, number or name">
+            <label for="_all">Search any column</label>
+            <input type="text" id="_all" placeholder="type a word, number or name">
           </div>
         </div>
 
         <div class="fgrid">
           {% for f in filters %}
-            {% if f.type == 'text' %}
-              <div class="field">
-                <label for="f_{{ f.col }}">{{ f.label }}</label>
-                <input type="text" id="f_{{ f.col }}" data-col="{{ f.col }}"></div>
-            {% elif f.type == 'number' %}
-              <div class="field span2"><label>{{ f.label }}</label><div class="pair">
-                <input type="number" data-col="{{ f.col }}__min" placeholder="min">
-                <input type="number" data-col="{{ f.col }}__max" placeholder="max"></div></div>
-            {% elif f.type == 'date' %}
-              <div class="field span2"><label>{{ f.label }}</label><div class="pair">
-                <input type="date" data-col="{{ f.col }}__from">
-                <input type="date" data-col="{{ f.col }}__to"></div></div>
-            {% endif %}
+            <div class="field">
+              <label for="f_{{ f.col }}">{{ f.label }}</label>
+              <input type="text" id="f_{{ f.col }}" data-col="{{ f.col }}"></div>
           {% endfor %}
         </div>
       </div>
@@ -909,9 +773,9 @@ PAGE = r"""<!doctype html>
     <div class="flash hide" id="flash"></div>
 
     <div class="blank" id="blank">
-      <div class="glyph">— — —</div>
+      <div class="glyph">§</div>
       <div class="t" id="blanktitle">Add files to begin</div>
-      <div class="s" id="blanksub">Drop the exports above. Nothing is read until you press Search, and leaving every filter empty returns all rows.</div>
+      <div class="s" id="blanksub">Drop the registry exports above. Nothing is read until you press Search, and leaving every filter empty returns every row.</div>
     </div>
 
     <div class="tablewrap hide" id="tablewrap">
@@ -919,10 +783,10 @@ PAGE = r"""<!doctype html>
     </div>
 
     <div class="pager hide" id="pager">
-      <button class="ghost" id="prev" type="button">Prev</button>
+      <button class="ghost" id="prev" type="button">‹ Previous</button>
       <span id="pageinfo"></span>
-      <button class="ghost" id="next" type="button">Next</button>
-      <span style="margin-left:auto">rows
+      <button class="ghost" id="next" type="button">Next ›</button>
+      <span style="margin-left:auto">Rows per page
         <select id="size"><option>25</option><option selected>50</option>
           <option>100</option><option>250</option></select></span>
     </div>
@@ -931,16 +795,16 @@ PAGE = r"""<!doctype html>
 
 <script>
 const $ = id => document.getElementById(id);
-let ROWS = [], COLS = [], LONG = [], PAGE = 1, NFILES = 0, HILITE = "";
-const NUMERIC = new Set(["consideration_amt","marketvalue","stampdutypaid","registrationfees",
-                         "docno","internaldocumentnumber","srocode","micrno"]);
-const PLAIN = new Set(["docno","internaldocumentnumber","srocode","micrno"]);
+let ROWS = [], COLS = [], WIDE = [], PAGE = 1, NFILES = 0, HILITE = "";
 const OK_EXT = /\.(xls|xlsx|xlsm|csv|html?)$/i;
+// columns rendered full-width with wrapping (long Marathi text)
+const PARTY = new Set(["sellerparty","purchaserparty"]);   // smaller type
+const PROP  = new Set(["propertydescription"]);
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-// ---------- sources: one control, files or folders, sent as picked ----------
+// ---------- sources ----------
 $("drop").onclick = () => $("picker").click();
 $("picker").onchange = e => send([...e.target.files]);
 
@@ -964,7 +828,6 @@ $("drop").addEventListener("drop", async e => {
   }
 });
 
-// recurse into dropped folders
 function walk(entry, out){
   return new Promise(res => {
     if (entry.isFile) return entry.file(f => { out.push(f); res(); }, res);
@@ -983,6 +846,16 @@ function setMsg(t, bad, busy){
   $("selmsg").className = bad ? "msg err" : "msg";
 }
 
+// a new upload REPLACES the old set; wipe any results still on screen
+function clearResults(){
+  ROWS = []; COLS = []; PAGE = 1;
+  $("tablewrap").classList.add("hide"); $("pager").classList.add("hide");
+  $("flash").classList.add("hide");
+  $("tally").textContent = "—"; $("stat").textContent = "";
+  $("thead").innerHTML = ""; $("tbody").innerHTML = "";
+  $("blank").classList.remove("hide");
+}
+
 async function send(files){
   const usable = files.filter(f => OK_EXT.test(f.name) && !f.name.startsWith("~$"));
   if (!usable.length) {
@@ -998,6 +871,7 @@ async function send(files){
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "could not add those");
     NFILES = j.files;
+    clearResults();                       // <- old results gone with the old files
     $("filecount").textContent = j.files + (j.files === 1 ? " file" : " files");
     $("chips").innerHTML = j.names.map(n => `<div class="chip"><span>${esc(n)}</span></div>`).join("") +
       (j.files > j.names.length ? `<div class="chip"><em>…and ${j.files - j.names.length} more</em></div>` : "");
@@ -1005,22 +879,20 @@ async function send(files){
     setMsg("not read yet — press Search", false);
     $("searchbtn").disabled = false; $("exportbtn").disabled = false;
     $("blanktitle").textContent = "Ready to search";
-    $("blanksub").textContent = "Press Search. Leaving every filter empty returns all rows.";
+    $("blanksub").textContent = "Press Search. Leaving every filter empty returns every row.";
     $("picker").value = "";
   } catch (e) { setMsg(e.message, true); }
 }
 
 $("clearfiles").onclick = async () => {
   await fetch("/api/clear", {method:"POST"});
-  NFILES = 0; ROWS = [];
+  NFILES = 0;
+  clearResults();
   $("chips").innerHTML = ""; $("filecount").textContent = "";
   $("clearfiles").classList.add("hide");
   $("searchbtn").disabled = true; $("exportbtn").disabled = true;
-  $("tablewrap").classList.add("hide"); $("pager").classList.add("hide");
-  $("blank").classList.remove("hide"); $("flash").classList.add("hide");
   $("blanktitle").textContent = "Add files to begin";
-  $("blanksub").textContent = "Drop the exports above. Nothing is read until you press Search.";
-  $("tally").textContent = "—"; $("stat").textContent = "";
+  $("blanksub").textContent = "Drop the registry exports above. Nothing is read until you press Search.";
   setMsg("cleared — uploaded copies deleted", false);
 };
 
@@ -1060,7 +932,7 @@ async function doSearch(){
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "search failed");
 
-    ROWS = j.rows; COLS = j.columns; LONG = j.long; HILITE = ($("_all").value || "").trim();
+    ROWS = j.rows; COLS = j.columns; WIDE = j.long || []; HILITE = ($("_all").value || "").trim();
     $("tally").innerHTML = "<b>" + j.total.toLocaleString() + "</b> <span>" +
       (j.total === 1 ? "row" : "rows") + "</span>";
     $("stat").textContent = j.files + " files · " + j.scanned.toLocaleString() +
@@ -1081,10 +953,6 @@ async function doSearch(){
   }
   $("searchbtn").disabled = false;
 }
-
-const fmt = (col, v) =>
-  (NUMERIC.has(col) && !PLAIN.has(col) && v !== "" && !isNaN(v))
-    ? Number(v).toLocaleString("en-IN") : v;
 
 function mark(html){
   if (!HILITE) return html;
@@ -1109,27 +977,23 @@ function showPage(page){
     return;
   }
 
-  $("thead").innerHTML = "<tr>" + COLS.map(c =>
-    `<th>${esc(c.replace(/_/g," ").replace("source file","file"))}</th>`).join("") + "</tr>";
+  $("thead").innerHTML =
+    "<colgroup>" + COLS.map(c => `<col class="c-${esc(c)}">`).join("") + "</colgroup>" +
+    "<tr>" + COLS.map(c => `<th>${esc(c.replace(/_/g," "))}</th>`).join("") + "</tr>";
 
+  // full text shown outright — no clamp, no "more" toggle
   $("tbody").innerHTML = ROWS.slice((PAGE-1)*size, PAGE*size).map(row =>
     "<tr>" + row.map((val, i) => {
-      const c = COLS[i], v = mark(esc(fmt(c, val)));
-      if (LONG.includes(c))
-        return `<td class="long"><div class="clip">${v}</div>` +
-          (String(val).length > 90 ? `<button class="more" type="button">more</button>` : "") + `</td>`;
-      return `<td class="${NUMERIC.has(c) ? "num" : ""}">${v}</td>`;
+      const c = COLS[i], v = mark(esc(val));
+      const cls = PARTY.has(c) ? "party" : PROP.has(c) ? "prop" : "";
+      return `<td class="${cls}">${v}</td>`;
     }).join("") + "</tr>").join("");
 
-  document.querySelectorAll(".more").forEach(b => b.onclick = () => {
-    b.textContent = b.previousElementSibling.classList.toggle("clip") ? "more" : "less";
-  });
-
   const from = (PAGE-1)*size + 1, to = Math.min(PAGE*size, ROWS.length);
-  $("pageinfo").textContent = `${from}–${to} of ${ROWS.length.toLocaleString()}`;
+  $("pageinfo").innerHTML = `<b>${from}–${to}</b> of <b>${ROWS.length.toLocaleString()}</b>`;
   $("prev").disabled = PAGE <= 1;
   $("next").disabled = to >= ROWS.length;
-  $("tablewrap").scrollTop = 0;
+  window.scrollTo({top: $("tablewrap").getBoundingClientRect().top + window.scrollY - 12, behavior:"smooth"});
 }
 
 // ---------- export ----------
