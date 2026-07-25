@@ -531,7 +531,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mahajan &amp; Associates — Registry Search</title>
+<titleLawayers — Search</title>
 <style>
   :root{
     /* high-contrast, everything legible at a glance */
