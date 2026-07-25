@@ -701,9 +701,9 @@ PAGE = r"""<!doctype html>
 <div class="app">
 
   <header class="masthead">
-    <div class="firm">Mahajan <span class="amp">&amp;</span> Associates</div>
+    <div class="firm">Lawyers</div>
     <div class="strap">
-      <span class="tool">Registry Search</span>
+      <span class="tool">Search</span>
       <span class="by">Built by <b>Siddhant Mahalank</b></span>
     </div>
   </header>
