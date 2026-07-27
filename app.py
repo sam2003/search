@@ -79,6 +79,11 @@ LONG_TEXT_COLUMNS = ["propertydescription", "sellerparty", "purchaserparty"]
 
 FILE_EXTENSIONS = (".xls", ".xlsx", ".xlsm", ".csv", ".htm", ".html")
 
+# AdSense publisher id, Formspree contact endpoint, and the address the form
+# emails. Override any of these via environment variables on the host.
+ADSENSE_CLIENT = os.environ.get("ADSENSE_CLIENT", "ca-pub-5876158560001890")
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "piratehere123@gmail.com")
+
 # ============================================================================
 # Small helpers
 # ============================================================================
@@ -526,12 +531,460 @@ def api_clear():
 # Page
 # ============================================================================
 
+
+# ============================================================================
+# Shared content-page building blocks (nav, footer, styling, AdSense)
+# ============================================================================
+
+ADSENSE_HEAD = (
+    '<script async src="https://pagead2.googlesyndication.com/pagead/js/'
+    'adsbygoogle.js?client=%s" crossorigin="anonymous"></script>'
+) % ADSENSE_CLIENT
+
+
+def ad_unit(slot_label=""):
+    """A responsive AdSense display unit. Only rendered on content pages,
+    beside real text — never on the search tool."""
+    return (
+        '<div class="adwrap"><span class="adtag">Advertisement</span>'
+        '<ins class="adsbygoogle" style="display:block" '
+        'data-ad-client="%s" data-ad-format="auto" '
+        'data-full-width-responsive="true"></ins>'
+        '<script>(adsbygoogle=window.adsbygoogle||[]).push({});</script></div>'
+    ) % ADSENSE_CLIENT
+
+
+NAV = r"""
+<header class="topnav">
+  <a class="brand" href="/">Registry<span class="amp">Search</span></a>
+  <nav>
+    <a href="/"{home}>Search</a>
+    <a href="/guide"{guide}>Guide</a>
+    <a href="/about"{about}>About IGR</a>
+    <a href="/contact"{contact}>Contact</a>
+    <a href="/privacy"{privacy}>Privacy</a>
+  </nav>
+</header>
+"""
+
+
+FOOTER = r"""
+<footer class="sitefoot">
+  <div class="footcol">
+    <div class="footbrand">RegistrySearch</div>
+    <p>A search tool for Maharashtra property-registration (IGR) records,
+       built to look across many registry exports at once.</p>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Pages</div>
+    <a href="/">Registry Search</a>
+    <a href="/guide">How-to Guide</a>
+    <a href="/about">About IGR &amp; This Tool</a>
+    <a href="/contact">Contact</a>
+    <a href="/privacy">Privacy Policy</a>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Note</div>
+    <p>IGR registration records are public documents published by the
+       Department of Registration &amp; Stamps, Government of Maharashtra.
+       This tool helps search exports of that public data.</p>
+  </div>
+  <div class="footbar">RegistrySearch · search Maharashtra IGR records</div>
+</footer>
+"""
+
+# CSS shared by the content pages (guide / about / contact / privacy)
+CONTENT_CSS = r"""
+  :root{
+    --ink:#111827;--ink-2:#374151;--muted:#6b7280;--paper:#f9fafb;--sheet:#fff;
+    --well:#f3f4f6;--line:#e5e7eb;--navy:#1e3a5f;--navy-2:#2563eb;--navy-3:#1d4ed8;
+    --navy-tint:#e0eaf7;--navy-hover:#eff6ff;--navy-soft:#93b4d8;
+    --sans:"Segoe UI",Roboto,Inter,system-ui,-apple-system,sans-serif;
+    --serif:Georgia,"Times New Roman",serif;--mono:ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+
+  .topnav{background:var(--navy);color:#fff;display:flex;align-items:center;
+          gap:26px;padding:0 26px;flex-wrap:wrap;border-bottom:3px solid var(--navy-2)}
+  .topnav .brand{font-family:var(--serif);font-size:20px;font-weight:700;color:#fff;
+                 text-decoration:none;padding:16px 0;margin-right:auto}
+  .topnav .brand .amp{color:var(--navy-soft);font-style:italic}
+  .topnav nav{display:flex;gap:4px;flex-wrap:wrap}
+  .topnav nav a{color:#cfe0f5;text-decoration:none;font-size:14px;font-weight:600;
+                padding:16px 14px;border-bottom:3px solid transparent;margin-bottom:-3px}
+  .topnav nav a:hover{color:#fff;background:rgba(255,255,255,.08)}
+  .topnav nav a.active{color:#fff;border-bottom-color:#fff}
+
+  .wrap{max-width:820px;margin:0 auto;padding:34px 24px 10px}
+  .page-h1{font-family:var(--serif);font-size:32px;font-weight:700;line-height:1.2;
+            margin:0 0 6px;color:var(--navy)}
+  .lede{font-size:18px;color:var(--ink-2);margin:0 0 8px}
+  .updated{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:26px}
+  .wrap h2{font-family:var(--serif);font-size:24px;color:var(--navy);
+           margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .wrap h3{font-size:18px;color:var(--ink);margin:24px 0 6px}
+  .wrap p{margin:0 0 14px}
+  .wrap ul,.wrap ol{margin:0 0 16px;padding-left:22px}
+  .wrap li{margin:0 0 7px}
+  .wrap a{color:var(--navy-2);text-decoration:underline;text-underline-offset:2px}
+  .mr{font-size:15px;color:var(--ink-2);background:var(--well);border-left:3px solid var(--navy-soft);
+      padding:10px 14px;margin:0 0 16px;border-radius:0 4px 4px 0}
+  .mr .lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;
+           letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:3px}
+  table.fields{width:100%;border-collapse:collapse;margin:6px 0 20px;font-size:15px}
+  table.fields th{background:var(--navy);color:#fff;text-align:left;padding:9px 12px;
+                  font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  table.fields td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.fields tr:nth-child(even) td{background:var(--well)}
+  table.fields td:first-child{font-family:var(--mono);font-size:13px;color:var(--navy);
+                              white-space:nowrap;font-weight:600}
+  .cta{display:inline-block;background:var(--navy-2);color:#fff;text-decoration:none;
+       font-weight:700;padding:11px 22px;border-radius:7px;margin:6px 0 10px}
+  .cta:hover{background:var(--navy-3)}
+  .emaillink{font-size:18px;font-weight:700;color:var(--navy-2);
+             text-decoration:none;border-bottom:2px solid var(--navy-2)}
+  .emaillink:hover{color:var(--navy-3);border-bottom-color:var(--navy-3)}
+  .callout{background:var(--navy-tint);border:1px solid #bfdbfe;border-radius:8px;
+           padding:16px 18px;margin:18px 0}
+  .callout .h{font-weight:700;color:var(--navy);margin-bottom:4px}
+
+  .adwrap{margin:26px 0;text-align:center;min-height:100px;
+          background:var(--well);border:1px solid var(--line);border-radius:8px;
+          padding:10px;overflow:hidden}
+  .adtag{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;
+         letter-spacing:.1em;color:var(--muted);margin-bottom:6px;text-align:left}
+
+  form.contact{background:var(--sheet);border:1px solid var(--line);border-radius:10px;
+               padding:24px;margin:10px 0 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  form.contact label{display:block;font-size:12px;font-family:var(--mono);
+                     text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+                     font-weight:600;margin:14px 0 5px}
+  form.contact input,form.contact textarea{width:100%;padding:11px 13px;
+    border:1.5px solid var(--line);border-radius:6px;font-family:inherit;font-size:15px;
+    color:var(--ink);background:#fff;outline:none}
+  form.contact input:focus,form.contact textarea:focus{border-color:var(--navy-2);
+    box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+  form.contact textarea{min-height:130px;resize:vertical}
+  form.contact .req{color:#b3261e}
+  form.contact button{margin-top:18px;background:var(--navy-2);color:#fff;border:0;
+    font-size:15px;font-weight:700;padding:12px 26px;border-radius:7px;cursor:pointer}
+  form.contact button:hover{background:var(--navy-3)}
+  .formnote{font-size:13px;color:var(--muted);margin-top:10px}
+  .flashmsg{padding:12px 16px;border-radius:8px;margin:0 0 16px;font-weight:600}
+  .flashmsg.ok{background:#e7f6ec;color:#146c2e;border:1px solid #a7dcb8}
+  .flashmsg.bad{background:#fbe9e7;color:#b3261e;border:1px solid #f3c0b8}
+
+  .sitefoot{background:var(--navy);color:#cfe0f5;margin-top:40px;
+            display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+            gap:26px;padding:32px 26px 0}
+  .sitefoot .footbrand{font-family:var(--serif);font-size:18px;color:#fff;font-weight:700;margin-bottom:8px}
+  .sitefoot .foothead{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+                      letter-spacing:.1em;color:var(--navy-soft);margin-bottom:10px}
+  .sitefoot p{font-size:13.5px;line-height:1.6;margin:0 0 10px;max-width:34ch}
+  .sitefoot a{display:block;color:#cfe0f5;text-decoration:none;font-size:14px;padding:3px 0}
+  .sitefoot a:hover{color:#fff;text-decoration:underline}
+  .sitefoot .footbar{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.16);
+                     margin-top:22px;padding:16px 0;font-size:13px;color:var(--navy-soft);text-align:center}
+  .sitefoot .footbar b{color:#fff}
+  @media(max-width:640px){.wrap{padding:24px 16px}.page-h1{font-size:26px}}
+"""
+
+
+def nav(active):
+    keys = {"home":"", "guide":"", "about":"", "contact":"", "privacy":""}
+    if active in keys:
+        keys[active] = ' class="active"'
+    return NAV.format(**keys)
+
+
+def content_page(title, active, body):
+    """Wrap body content in the full HTML shell with head, nav, footer."""
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>%s — RegistrySearch</title>%s<style>%s</style></head><body>%s"
+        "<main class=\"wrap\">%s</main>%s</body></html>"
+    ) % (title, ADSENSE_HEAD, CONTENT_CSS, nav(active), body, FOOTER)
+
+
+# ============================================================================
+# Content page bodies — real, original content for AdSense + genuine use
+# ============================================================================
+
+GUIDE_BODY = r"""
+<h1 class="page-h1">How to Search Registry Exports</h1>
+<p class="lede">A step-by-step guide to exporting property-registration records
+from the Maharashtra IGR portal and searching across many of them at once with
+this tool. <span lang="mr">(नोंदणी अभिलेख कसे शोधावेत — मार्गदर्शक)</span></p>
+<p class="updated">Practical guide · covers exporting, uploading, filtering and reading results</p>
+
+<h2>1. What this tool does</h2>
+<p>The Maharashtra registration portal lets you export search results as a
+spreadsheet file. Each export is a snapshot of a single search — one area, one
+period, one set of criteria. In real work you end up with many such files, and
+answering a simple question ("did this person buy or sell anything across all
+of these?") means opening each file by hand.</p>
+<p>This tool loads any number of those exports together and searches across all
+of them at once. You drop the files in, type what you are looking for, and it
+returns matching rows from every file in one table. Nothing is stored on a
+server between visits — the files you add are read only when you press Search.</p>
+<div class="mr"><span class="lbl">मराठी सारांश</span>
+हे साधन अनेक निर्यात (export) केलेल्या एक्सेल फायली एकत्र उघडते आणि सर्व फायलींमध्ये
+एकाच वेळी शोध घेते. फायली फक्त "Search" दाबल्यावरच वाचल्या जातात.</div>
+
+<h2>2. Exporting records from the IGR portal</h2>
+<p>The public search service of the Department of Registration &amp; Stamps
+lets you look up registered documents and download the results. In broad terms:</p>
+<ol>
+  <li>Open the department's public property-search service and choose the
+      search type (for example, search by area, by party name, or by document
+      number).</li>
+  <li>Select the district, the sub-registrar office (SRO) and the year or date
+      range you need.</li>
+  <li>Run the search. The portal shows a results grid of matching documents.</li>
+  <li>Use the export or download option to save those results as a spreadsheet
+      file. This file is what you load into this tool.</li>
+</ol>
+<div class="callout"><div class="h">A note on the file format</div>
+These exports usually arrive with an <code>.xls</code> extension but are, in
+fact, HTML tables saved in a Unicode (UTF-16) encoding. That is why Excel often
+shows a warning when you open one. This tool reads that format directly, so you
+do not need to convert or "fix" the files first — drop them in as they came off
+the portal.</div>
+
+<h2>3. Adding files to the tool</h2>
+<p>On the search page there is a drop zone on the left. You can:</p>
+<ul>
+  <li><b>Drag files onto it</b> — one file, several files, or a whole folder.
+      Folders are read right through, including sub-folders.</li>
+  <li><b>Click it</b> to open the file picker and choose files manually.</li>
+</ul>
+<p>Each new selection replaces the previous one, so if you load a fresh set of
+files the old ones are cleared out and will not turn up in later results.
+Accepted types are <code>.xls</code>, <code>.xlsx</code>, <code>.xlsm</code>,
+<code>.csv</code>, <code>.htm</code> and <code>.html</code>.</p>
+
+<h2>4. Searching and filtering</h2>
+<p>Every filter is optional. Leave them all empty and press Search to see every
+row in every file. Fill in one or more to narrow down:</p>
+<ul>
+  <li><b>Search any column</b> — the broad box at the top. Type any word,
+      number or name and it looks across every field of every row.</li>
+  <li><b>Document no</b> — the registration document number.</li>
+  <li><b>Document type</b> — the kind of deed (sale, gift, release, and so on).</li>
+  <li><b>Seller</b> and <b>Purchaser</b> — party names. These match loosely,
+      ignoring spaces, quotes and braces, because the portal often exports
+      names run together without spaces.</li>
+  <li><b>Property contains</b> — any part of the property description: a survey
+      number, building name, area, or flat number.</li>
+</ul>
+<p>Combinations work as an "and" — filling in both a document type and a
+purchaser returns rows that match both. Press <b>Enter</b> from any box, or the
+Search button, to run it.</p>
+<div class="mr"><span class="lbl">मराठी सारांश</span>
+प्रत्येक filter ऐच्छिक आहे. विक्रेता व खरेदीदार यांची नावे "loose" पद्धतीने जुळतात —
+म्हणजे स्पेस, कंस वगैरे दुर्लक्ष करून. सर्व filter रिकामे ठेवून Search दाबल्यास सर्व
+नोंदी दिसतात.</div>
+
+""" + ad_unit() + r"""
+<h2>5. Reading the results</h2>
+<p>Results appear below in a table, paged so large result sets stay quick to
+scan. If you searched the "any column" box, matches are highlighted. Long
+fields such as the property description and party names wrap fully so nothing
+is hidden. The <b>Download CSV</b> button saves whatever the current filters
+return as a spreadsheet you can open in Excel — encoded so Marathi text
+displays correctly.</p>
+
+<h2>6. What each column means</h2>
+<p>The exports share a common set of columns. The most useful ones:</p>
+<table class="fields">
+  <tr><th>Column</th><th>What it holds</th></tr>
+  <tr><td>docno</td><td>The registration document number for that entry.</td></tr>
+  <tr><td>docname</td><td>Type of document — sale deed, gift deed, release, lease, and so on.</td></tr>
+  <tr><td>registrationdate</td><td>Date the document was registered at the SRO.</td></tr>
+  <tr><td>sroname</td><td>The sub-registrar office where it was registered.</td></tr>
+  <tr><td>sellerparty</td><td>Name(s) of the selling / executing party.</td></tr>
+  <tr><td>purchaserparty</td><td>Name(s) of the purchasing / claimant party.</td></tr>
+  <tr><td>propertydescription</td><td>Free-text description: survey/CTS number, building, area, flat, and extents.</td></tr>
+  <tr><td>areaname</td><td>The village or area the property sits in.</td></tr>
+</table>
+
+<h2>7. Common pitfalls</h2>
+<ul>
+  <li><b>Names not matching.</b> The portal often exports party names without
+      spaces and inside braces. Use the Seller/Purchaser boxes (which match
+      loosely) rather than the exact-text approach, and try a shorter fragment
+      of the name.</li>
+  <li><b>Expecting the file to be a normal Excel workbook.</b> It is HTML in
+      disguise; do not re-save it through another program before loading, as
+      that can change the encoding and garble Marathi text.</li>
+  <li><b>Very large result sets.</b> A completely empty search over many files
+      returns everything; add at least one filter when you only need a slice.</li>
+  <li><b>Mixed columns.</b> If some files have slightly different columns, the
+      tool still loads them together and simply leaves missing fields blank.</li>
+</ul>
+
+<a class="cta" href="/">Open the search tool →</a>
+"""
+
+ABOUT_BODY = r"""
+<h1 class="page-h1">About IGR &amp; This Tool</h1>
+<p class="lede">What the Maharashtra IGR is, why property registration matters,
+and why we built a tool to search its exported records.
+<span lang="mr">(आय.जी.आर. व या साधनाविषयी)</span></p>
+<p class="updated">Background &amp; context</p>
+
+<h2>What is the IGR?</h2>
+<p>IGR stands for the <b>Inspector General of Registration</b>, the head of the
+Department of Registration &amp; Stamps under the Government of Maharashtra. The
+department administers the registration of documents and the collection of
+stamp duty across the state, through a network of sub-registrar offices (SROs)
+in every district and taluka.</p>
+<p>When a property changes hands — a flat is sold, land is gifted, a lease is
+granted — the transaction is recorded through this department. The registered
+document, and the index of it, becomes part of the public record.</p>
+<div class="mr"><span class="lbl">मराठी सारांश</span>
+आय.जी.आर. म्हणजे <b>महानिरीक्षक नोंदणी</b> — महाराष्ट्र शासनाचा नोंदणी व मुद्रांक विभाग.
+मालमत्तेचे व्यवहार (खरेदी, विक्री, बक्षीस, भाडेपट्टा) याच विभागामार्फत नोंदवले जातात.</div>
+
+<h2>Why property registration is needed</h2>
+<p>Registration serves several purposes that matter to anyone dealing with
+property:</p>
+<ul>
+  <li><b>Legal proof of ownership.</b> A registered document is strong evidence
+      of the transaction and the parties to it.</li>
+  <li><b>A public record.</b> Because registrations are indexed and searchable,
+      a prospective buyer or a lawyer can trace the history of a property — who
+      owned it, when it changed hands, and on what terms.</li>
+  <li><b>Stamp duty and revenue.</b> Registration is the point at which stamp
+      duty and registration fees are assessed and paid.</li>
+  <li><b>Preventing fraud and disputes.</b> A searchable record of prior
+      dealings makes it far harder to sell the same property twice or to hide
+      an earlier claim.</li>
+</ul>
+
+<h2>How these records are used</h2>
+<p>Lawyers, title-search professionals, lenders, and buyers rely on registry
+records constantly:</p>
+<ul>
+  <li><b>Title verification</b> before a purchase or a loan — establishing a
+      clean chain of ownership.</li>
+  <li><b>Due diligence</b> — checking whether a party has other dealings, or
+      whether a property carries earlier transactions.</li>
+  <li><b>Litigation support</b> — assembling the documentary history of a
+      disputed property.</li>
+</ul>
+
+""" + ad_unit() + r"""
+<h2>Why we built this tool</h2>
+<p>The department's public search service is excellent for one lookup at a
+time. But professional work is rarely one lookup. A single title search can
+involve dozens of exported result files — several areas, several years, several
+name variations — and the real questions cut <em>across</em> all of them:
+"Across everything I have pulled, where does this name appear, as buyer or
+seller?"</p>
+<p>Answering that by opening each spreadsheet by hand is slow and error-prone.
+This tool was built to close that gap: load every export together, search and
+filter across all of them at once, and get one clean, exportable table of
+matches. It reads the portal's exact file format, handles Marathi text
+correctly, and keeps nothing on a server between sessions.</p>
+<div class="callout"><div class="h">On the data</div>
+This tool does not connect to any government system and does not hold a copy of
+the registry. It searches the export files that <em>you</em> load, which are
+themselves drawn from records the department already publishes. The underlying
+registration records are public documents.</div>
+
+<a class="cta" href="/guide">Read the how-to guide →</a>
+"""
+
+PRIVACY_BODY = r"""
+<h1 class="page-h1">Privacy Policy</h1>
+<p class="lede">How this tool handles the files you load and the information you
+send through the contact form.</p>
+<p class="updated">Please read alongside the notes on the search page.</p>
+
+<h2>Files you load</h2>
+<p>When you add Excel or CSV files to the search tool, they are sent to the
+server only so they can be read for your search. They are held on temporary
+storage for the duration of your session and are cleared when you clear your
+selection, when your session ends, or when the server restarts. The files are
+not shared, not indexed, and not retained as a permanent database. Each new
+selection replaces the previous one.</p>
+
+<h2>What we do not do</h2>
+<ul>
+  <li>We do not build or keep a central copy of registry data.</li>
+  <li>We do not sell or share the contents of files you load.</li>
+  <li>We do not require an account or ask you to sign in.</li>
+</ul>
+
+<h2>Contacting us</h2>
+<p>The contact page lists an email address. If you write to us, we use your
+message only to reply to your enquiry.</p>
+
+<h2>Advertising</h2>
+<p>Some pages on this site (such as the guide and about pages) may display ads
+served by Google, through the Google AdSense programme. Google and its partners
+may use cookies to serve ads based on a user's visits to this and other
+websites. You can review and control how Google uses data for advertising, and
+opt out of personalised advertising, through Google's Ads Settings. The search
+tool page itself does not carry advertising.</p>
+
+<h2>Analytics and cookies</h2>
+<p>The tool uses a small cookie only to keep your file selection tied to your
+own browser session. Advertising on the content pages may set additional
+cookies as described above.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy can be sent through the
+<a href="/contact">contact page</a>.</p>
+"""
+
+def contact_body():
+    return r"""
+<h1 class="page-h1">Contact</h1>
+<p class="lede">Questions about the tool, the guide, or a problem with a file?
+Reach us by email and we will reply.</p>
+<div class="callout">
+  <div class="h">Email</div>
+  <p style="margin:0"><a href="mailto:%s" class="emaillink">%s</a></p>
+</div>
+<p>We usually respond within a couple of working days. When writing about a
+file that will not load, it helps to mention which registry office (SRO) and
+period the export came from.</p>
+""" % (CONTACT_EMAIL, CONTACT_EMAIL)
+
+
+@app.route("/guide")
+def guide():
+    return content_page("How-to Guide", "guide", GUIDE_BODY)
+
+
+@app.route("/about")
+def about():
+    return content_page("About IGR", "about", ABOUT_BODY)
+
+
+@app.route("/privacy")
+def privacy():
+    return content_page("Privacy Policy", "privacy", PRIVACY_BODY)
+
+
+@app.route("/contact")
+def contact():
+    return content_page("Contact", "contact", contact_body())
+
+
+
 PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lawyers — Search</title>
+<title>RegistrySearch — Search Maharashtra IGR Property Records</title>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5876158560001890" crossorigin="anonymous"></script>
 <style>
 :root{
     --ink:#111827;
@@ -577,10 +1030,15 @@ PAGE = r"""<!doctype html>
   .masthead .firm{font-family:var(--serif);font-size:26px;font-weight:700;
                   color:#fff;letter-spacing:.01em;line-height:1.1}
   .masthead .firm .amp{color:#93b4d8;font-style:italic;padding:0 2px}
-  .masthead .tool{font-family:var(--mono);font-size:22px;text-transform:uppercase;
+  .masthead .tool{font-family:var(--mono);font-size:11px;text-transform:uppercase;
                   letter-spacing:.22em;color:#e0eaf7;font-weight:600;
                   align-self:center;padding-left:14px;
                   border-left:1px solid rgba(255,255,255,.25)}
+  .mastnav{display:flex;gap:2px;flex-wrap:wrap}
+  .mastnav a{color:#cfe0f5;text-decoration:none;font-size:13px;font-weight:600;
+             padding:6px 12px;border-radius:6px}
+  .mastnav a:hover{background:rgba(255,255,255,.1);color:#fff}
+  .mastnav a.active{background:rgba(255,255,255,.16);color:#fff}
   .masthead .by{margin-left:auto;font-size:13px;color:#93b4d8}
   .masthead .by b{font-family:var(--serif);font-style:italic;font-weight:700;
                   color:#fff;font-size:15px}
@@ -705,15 +1163,60 @@ PAGE = r"""<!doctype html>
     .src{border-right:0;border-bottom:1px solid var(--line)}
     .sheet{margin:0 8px}
   }
+
+  /* ---- info content below the tool (same URL as the tool) ---- */
+  .infoblock{max-width:900px;margin:6px auto 0;padding:8px 26px 20px;line-height:1.7}
+  .ib-h1{font-family:var(--serif);font-size:26px;color:var(--navy);margin:14px 0 6px;line-height:1.25}
+  .ib-lede{font-size:16px;color:var(--ink-2);margin:0 0 8px}
+  .infoblock h2{font-family:var(--serif);font-size:21px;color:var(--navy);
+                margin:28px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .infoblock h3{font-size:16px;color:var(--ink);margin:18px 0 4px}
+  .infoblock p{margin:0 0 12px;color:var(--ink)}
+  .infoblock ol,.infoblock ul{margin:0 0 14px;padding-left:22px}
+  .infoblock li{margin:0 0 7px}
+  .infoblock a{color:var(--navy-2);text-decoration:underline;text-underline-offset:2px}
+  .infoblock code{background:var(--well);padding:1px 5px;border-radius:3px;font-size:13px}
+  .ib-mr{font-size:14.5px;color:var(--ink-2);background:var(--well);
+         border-left:3px solid var(--navy-soft);padding:10px 14px;margin:0 0 14px;border-radius:0 4px 4px 0}
+  .ib-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;
+          color:var(--muted);display:block;margin-bottom:3px}
+  .ib-fields{width:100%;border-collapse:collapse;margin:4px 0 18px;font-size:14.5px}
+  .ib-fields th{background:var(--navy);color:#fff;text-align:left;padding:8px 12px;
+                font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .ib-fields td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .ib-fields tr:nth-child(even) td{background:var(--well)}
+  .ib-fields td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--navy);font-weight:600}
+  .adwrap{margin:22px 0;text-align:center;min-height:100px;background:var(--well);
+          border:1px solid var(--line);border-radius:8px;padding:10px;overflow:hidden}
+  .adtag{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;
+         letter-spacing:.1em;color:var(--muted);margin-bottom:6px;text-align:left}
+  .sitefoot{background:var(--navy);color:#cfe0f5;margin-top:36px;
+            display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+            gap:26px;padding:32px 26px 0}
+  .sitefoot .footbrand{font-family:var(--serif);font-size:18px;color:#fff;font-weight:700;margin-bottom:8px}
+  .sitefoot .foothead{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+                      letter-spacing:.1em;color:var(--navy-soft);margin-bottom:10px}
+  .sitefoot p{font-size:13.5px;line-height:1.6;margin:0 0 10px;max-width:34ch}
+  .sitefoot a{display:block;color:#cfe0f5;text-decoration:none;font-size:14px;padding:3px 0}
+  .sitefoot a:hover{color:#fff;text-decoration:underline}
+  .sitefoot .footbar{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.16);
+                     margin-top:22px;padding:16px 0;font-size:13px;color:var(--navy-soft);text-align:center}
+  .sitefoot .footbar b{color:#fff}
 </style>
 </head>
 <body>
 <div class="app">
 
   <header class="masthead">
-    <span class="firm">Lawyers</span>
-    <span class="tool">Search</span>
-    <span class="by">Built by <b>Siddhant Mahalank</b></span>
+    <span class="firm">Registry<span class="amp">Search</span></span>
+    <span class="tool">Registry Search</span>
+    <nav class="mastnav">
+      <a href="/" class="active">Search</a>
+      <a href="/guide">Guide</a>
+      <a href="/about">About IGR</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <span class="by">Search Maharashtra IGR records</span>
   </header>
 
   <!-- band 1 — files and filters -->
@@ -799,7 +1302,114 @@ PAGE = r"""<!doctype html>
           <option>100</option><option>250</option></select></span>
     </div>
   </section>
+
+  <!-- content below the tool: on the SAME url as the tool, so this page
+       carries real text of its own (and ad slots sit beside that text) -->
+  <section class="infoblock">
+    <h1 class="ib-h1">Search Maharashtra Property-Registration (IGR) Records</h1>
+    <p class="ib-lede">Load the Excel exports from the Maharashtra registration
+      portal and search across all of them at once — by document number, type,
+      party name, or property description. This page explains what the tool
+      does, how to use it, and how to read what it returns.</p>
+
+    <h2>What this tool is for</h2>
+    <p>The Department of Registration &amp; Stamps (IGR), Government of
+      Maharashtra, publishes an index of registered documents — sales, gifts,
+      releases, leases and more — through its public search service. That
+      service returns one search at a time as a downloadable spreadsheet. In
+      real title-search or due-diligence work you gather many such exports
+      across different areas, years and name spellings, and the questions that
+      matter cut across all of them at once: <em>where does this name appear as
+      a buyer or a seller, in any of these files?</em></p>
+    <p>Opening each spreadsheet by hand to answer that is slow. This tool loads
+      every export together and searches them as one set, returning matching
+      rows from all of them in a single table you can page through and download.
+      Files are read only when you press Search, and nothing is kept on the
+      server between sessions.</p>
+    <div class="ib-mr"><span class="ib-lbl">मराठी सारांश</span>
+      हे साधन महाराष्ट्र नोंदणी विभागाच्या (IGR) निर्यात केलेल्या अनेक एक्सेल फायली
+      एकत्र उघडते आणि दस्त क्रमांक, दस्त प्रकार, पक्षकाराचे नाव किंवा मालमत्ता वर्णनानुसार
+      सर्व फायलींमध्ये एकाच वेळी शोध घेते.</div>
+
+    <div class="adwrap"><span class="adtag">Advertisement</span>
+      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5876158560001890"
+        data-ad-format="auto" data-full-width-responsive="true"></ins>
+      <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script></div>
+
+    <h2>How to use it, step by step</h2>
+    <ol>
+      <li><b>Export from the IGR portal.</b> Run your search on the department's
+        public property-search service and download the result as a spreadsheet.
+        The file usually has an <code>.xls</code> name but is really an HTML
+        table in UTF-16 — this tool reads that directly, so you do not need to
+        convert it first.</li>
+      <li><b>Add the files.</b> Drag files or a whole folder onto the drop zone
+        at the top of this page, or click it to pick files. Each new selection
+        replaces the last, so old files never leak into new results.</li>
+      <li><b>Filter.</b> Every box is optional. Use <b>Search any column</b> for
+        a broad look, or the specific boxes — Document no, Document type, Seller,
+        Purchaser, Property contains. Seller and Purchaser match loosely,
+        ignoring spaces and braces, because the portal exports names run
+        together.</li>
+      <li><b>Read and export.</b> Matches appear in the table above, paged for
+        speed, with any-column matches highlighted. Download CSV saves the
+        current filtered set with Marathi text intact.</li>
+    </ol>
+
+    <h2>What the columns mean</h2>
+    <table class="ib-fields">
+      <tr><th>Column</th><th>What it holds</th></tr>
+      <tr><td>docno</td><td>Registration document number.</td></tr>
+      <tr><td>docname</td><td>Document type — sale, gift, release, lease, etc.</td></tr>
+      <tr><td>registrationdate</td><td>Date registered at the sub-registrar office.</td></tr>
+      <tr><td>sroname</td><td>The sub-registrar office (SRO).</td></tr>
+      <tr><td>sellerparty / purchaserparty</td><td>Names of the executing and claiming parties.</td></tr>
+      <tr><td>propertydescription</td><td>Survey/CTS number, building, area, flat and extents.</td></tr>
+    </table>
+
+    <h2>Common questions</h2>
+    <h3>Why does Excel warn when opening the export?</h3>
+    <p>Because the portal's <code>.xls</code> files are HTML tables in disguise,
+      saved in Unicode. That is normal. Load them into this tool as they came
+      off the portal — do not re-save them through another program, as that can
+      garble the Marathi text.</p>
+    <h3>A party name will not match — why?</h3>
+    <p>Names are often exported without spaces and inside braces. Use the Seller
+      or Purchaser boxes, which match loosely, and try a shorter fragment of the
+      name rather than the full string.</p>
+    <h3>Is my data uploaded permanently?</h3>
+    <p>No. Files are read for your search and cleared when you clear your
+      selection or your session ends. See the
+      <a href="/privacy">privacy policy</a> for detail.</p>
+
+    <p style="margin-top:22px">More detail is in the
+      <a href="/guide">full how-to guide</a> and the
+      <a href="/about">background on IGR and this tool</a>.</p>
+  </section>
 </div>
+
+<footer class="sitefoot">
+  <div class="footcol">
+    <div class="footbrand">RegistrySearch</div>
+    <p>A search tool for Maharashtra property-registration (IGR) records, built
+      to look across many registry exports at once.</p>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Pages</div>
+    <a href="/">Registry Search</a>
+    <a href="/guide">How-to Guide</a>
+    <a href="/about">About IGR &amp; This Tool</a>
+    <a href="/contact">Contact</a>
+    <a href="/privacy">Privacy Policy</a>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Note</div>
+    <p>IGR registration records are public documents published by the Department
+      of Registration &amp; Stamps, Government of Maharashtra. This tool searches
+      exports of that public data.</p>
+  </div>
+  <div class="footbar">RegistrySearch · search Maharashtra IGR records</div>
+</footer>
 
 <script>
 const $ = id => document.getElementById(id);
