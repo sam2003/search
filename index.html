@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RegistrySearch — Search Maharashtra IGR Property Records</title>
+<meta name="description" content="Load Maharashtra IGR property-registration exports and search across all of them at once by document number, type, party name or property description. Files never leave your computer.">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5876158560001890" crossorigin="anonymous"></script>
+<style>
+:root{
+    --ink:#111827;
+    --ink-2:#374151;
+    --muted:#6b7280;
+    --paper:#f9fafb;
+    --sheet:#ffffff;
+    --well:#f3f4f6;
+    --line:#e5e7eb;
+    --line-2:#f3f4f6;
+    --navy:#1e3a5f;
+    --navy-2:#2563eb;
+    --navy-3:#1d4ed8;
+    --navy-tint:#e0eaf7;
+    --navy-hover:#eff6ff;
+    --navy-soft:#93b4d8;
+    --gold:#a5540a;
+    --gold-tint:#fbe6c0;
+    --warn:#b3261e;
+    --warn-tint:#fbe9e7;
+    --sans:"Segoe UI",Roboto,Inter,system-ui,-apple-system,sans-serif;
+    --serif:Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;
+       font-variant-numeric:tabular-nums}
+
+  .app{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;
+       min-height:100vh;padding:0 0 32px;max-width:1720px;margin:0 auto}
+
+  .sheet{background:var(--sheet);border:1px solid var(--line);
+         border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+         display:flex;flex-direction:column;min-width:0;overflow:hidden;
+         margin:0 24px}
+  .masthead{border-radius:0;margin:0}
+
+  /* ---------- masthead ---------- */
+  .masthead{background:#1e3a5f;color:#fff;padding:18px 28px;
+            display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+            border-bottom:3px solid #2563eb;margin-bottom:20px}
+  .masthead .firm{font-family:var(--serif);font-size:26px;font-weight:700;
+                  color:#fff;letter-spacing:.01em;line-height:1.1}
+  .masthead .firm .amp{color:#93b4d8;font-style:italic;padding:0 2px}
+  .masthead .tool{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+                  letter-spacing:.22em;color:#e0eaf7;font-weight:600;
+                  align-self:center;padding-left:14px;
+                  border-left:1px solid rgba(255,255,255,.25)}
+  .mastnav{display:flex;gap:2px;flex-wrap:wrap}
+  .mastnav a{color:#cfe0f5;text-decoration:none;font-size:13px;font-weight:600;
+             padding:6px 12px;border-radius:6px}
+  .mastnav a:hover{background:rgba(255,255,255,.1);color:#fff}
+  .mastnav a.active{background:rgba(255,255,255,.16);color:#fff}
+  .masthead .by{margin-left:auto;font-size:13px;color:#93b4d8}
+  .masthead .by b{font-family:var(--serif);font-style:italic;font-weight:700;
+                  color:#fff;font-size:15px}
+
+  /* ---------- band 1 ---------- */
+  .qgrid{display:grid;grid-template-columns:320px minmax(0,1fr)}
+  .src{padding:20px;background:#1e3a5f;border-right:1px solid rgba(255,255,255,.22);border-radius:10px 0 0 0}
+  .filters{padding:20px 24px 24px;min-width:0;background:#1e3a5f;border-radius:0 10px 0 0}
+
+  .cap{font-family:var(--sans);font-size:11px;text-transform:uppercase;
+       letter-spacing:.12em;color:#fff;font-weight:700;
+       display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .cap .n{margin-left:auto;color:#fff;letter-spacing:.02em;
+          background:rgba(255,255,255,.14);padding:2px 9px;border:1px solid rgba(255,255,255,.3);
+          font-size:11px;border-radius:10px;font-weight:700}
+  .cap .hint{text-transform:none;letter-spacing:0;font-family:var(--sans);
+             font-size:12px;color:#e0eaf7;font-weight:600}
+
+  .drop{border:2px dashed rgba(255,255,255,.35);background:rgba(255,255,255,.06);padding:24px 16px;
+        text-align:center;cursor:pointer;display:block;width:100%;font:inherit;
+        color:#fff;transition:border-color .12s,background .12s;border-radius:8px}
+  .drop:hover{border-color:#7ab0f0;background:rgba(255,255,255,.12)}
+  .drop.over{border-color:#7ab0f0;background:rgba(255,255,255,.14);border-style:solid}
+  .drop .big{font-weight:700;font-size:14px;display:block;color:#fff}
+  .drop .small{font-size:12px;color:#e0eaf7;display:block;margin-top:4px;font-weight:600}
+  .drop svg{opacity:.7;margin-bottom:8px;color:#bcd3ee}
+
+  .chips{margin-top:14px;max-height:230px;overflow:auto;font-size:12.5px;color:#fff;font-weight:600}
+  .chip{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.22);
+        display:flex;gap:8px;align-items:center}
+  .chip .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .chip em{color:#bcd3ee;font-style:normal;flex:none;font-size:11.5px;font-family:var(--mono)}
+  .chip.bad .nm{color:#ffc9c2}
+  .chip.bad em{color:#ffc9c2}
+  .chip .x{flex:none;background:none;border:0;color:#9fbcdd;font-size:17px;line-height:1;
+           padding:0 2px;cursor:pointer;border-radius:4px;font-weight:700}
+  .chip .x:hover:not(:disabled){color:#fff;background:rgba(255,255,255,.16)}
+
+  label{display:block;font-size:11px;font-family:var(--sans);text-transform:uppercase;
+        letter-spacing:.08em;color:#fff;margin-bottom:5px;font-weight:700}
+  input[type=text]{
+    width:100%;padding:9px 12px;border:1.5px solid #3a577a;
+    background:#fff;font-family:inherit;font-size:14px;color:var(--ink);
+    border-radius:6px;outline:none;transition:border-color .15s,box-shadow .15s}
+  input[type=text]:hover{border-color:#6f93bd}
+  input[type=text]:focus{border-color:#7ab0f0;box-shadow:0 0 0 3px rgba(122,176,240,0.35)}
+  input::placeholder{color:#9ca3af}
+  .drop:focus-visible,button:focus-visible{outline:2.5px solid #2563eb;outline-offset:2px}
+  .field{margin-bottom:14px}
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 18px}
+
+  .shortcuts{padding-top:14px;border-top:1px solid rgba(255,255,255,.3)}
+  .shortcuts .cap{margin-bottom:10px}
+  .sclist{display:flex;flex-wrap:wrap;gap:7px}
+  .sc{background:rgba(255,255,255,.1);color:#fff;border:1.5px solid rgba(255,255,255,.3);
+      font-size:13.5px;font-weight:600;padding:6px 14px;border-radius:999px;
+      cursor:pointer;letter-spacing:0;line-height:1.5;text-align:left;
+      white-space:normal;max-width:100%}
+  .sc:hover:not(:disabled){background:rgba(255,255,255,.2);border-color:#7ab0f0}
+  .sc.on{background:#fff;color:#1e3a5f;border-color:#fff}
+  .sc.on:hover:not(:disabled){background:#fff;border-color:#fff}
+  .sc:disabled{opacity:.4;cursor:not-allowed}
+  .any{margin:0 0 18px;padding:0 0 18px;background:none;
+       border:0;border-bottom:1px solid rgba(255,255,255,.3);border-radius:0}
+  .any input{font-size:15px;padding:10px 12px;border-color:#93b4d8}
+  .any input:focus{border-color:#7ab0f0;box-shadow:0 0 0 3px rgba(122,176,240,0.35)}
+  .any label{font-size:12px;color:#fff;font-weight:700}
+
+  button{font-family:var(--sans);font-size:14px;font-weight:700;padding:10px 22px;
+         border:none;background:#2563eb;color:#fff;cursor:pointer;
+         border-radius:7px;letter-spacing:.02em;transition:.12s}
+  button:hover:not(:disabled){background:#1d4ed8}
+  button.ghost{background:#fff;color:#1e3a5f;border:1.5px solid #2563eb}
+  button.ghost:hover:not(:disabled){background:var(--navy-hover)}
+  button.link{background:none;border:0;color:#bcd3ee;padding:0;font-size:12px;
+              font-family:var(--sans);text-decoration:underline;text-underline-offset:3px;
+              font-weight:600;letter-spacing:0}
+  button.link:hover:not(:disabled){color:#fff;background:none}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  .actions{display:flex;gap:12px;align-items:center;padding:16px 24px;
+           border-top:1px solid rgba(255,255,255,.22);background:#1e3a5f;border-radius:0 0 10px 10px}
+  .actions .msg{font-size:13px;color:#dbe6f5;margin-left:auto;text-align:right;font-weight:600}
+  .actions .msg.err{color:#ffc9c2}
+
+  /* ---------- results ---------- */
+  .bar{display:flex;align-items:center;gap:16px;padding:14px 22px;
+       border-bottom:2px solid #1e3a5f;flex-wrap:wrap;background:var(--well);
+       border-radius:10px 10px 0 0}
+  .bar h2{margin:0;font-size:11px;text-transform:uppercase;
+          letter-spacing:.14em;color:#2563eb;font-weight:700}
+  .tally{font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+  .tally span{color:var(--muted);font-weight:400;font-size:14px}
+  .stat{font-family:var(--mono);font-size:12px;color:var(--ink-2);margin-left:auto}
+  .flash{padding:11px 22px;background:var(--warn-tint);color:var(--warn);
+         font-size:13px;border-bottom:1px solid var(--line);font-weight:500}
+
+  .tablewrap{min-width:0;overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;table-layout:fixed}
+  col.c-docno{width:7%}
+  col.c-registrationdate{width:8%}
+  col.c-docname{width:9%}
+  col.c-areaname{width:8%}
+  col.c-sroname{width:11%}
+  col.c-sellerparty{width:15%}
+  col.c-purchaserparty{width:15%}
+  col.c-propertydescription{width:27%}
+  th{background:#1e3a5f;text-align:left;padding:11px 14px;
+     font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+     white-space:nowrap;color:#e0eaf7;font-weight:600;border-bottom:2px solid #2563eb}
+  td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;
+     color:var(--ink);line-height:1.5;overflow-wrap:break-word;word-break:break-word}
+  tbody tr:nth-child(even) td{background:var(--well)}
+  tbody tr:hover td{background:var(--navy-hover)}
+  td.party,td.prop{font-size:12.5px;line-height:1.45}
+  mark{background:var(--gold-tint);color:var(--ink);padding:0 2px;font-weight:600;border-radius:2px}
+
+  .pager{display:flex;gap:12px;align-items:center;padding:12px 22px;
+         border-top:1px solid var(--line);font-size:13px;color:var(--ink-2);
+         border-radius:0 0 10px 10px}
+  .pager button{padding:7px 14px;font-size:13px}
+  .pager select{padding:5px 8px;font-size:13px;border:1.5px solid var(--line);
+                background:#fff;color:var(--ink);border-radius:6px;outline:none}
+  .pager b{color:var(--ink)}
+
+  .blank{flex:1;min-height:260px;display:grid;place-content:center;text-align:center;
+         padding:48px;color:var(--ink-2);gap:8px;max-width:460px;margin:0 auto}
+  .blank .t{font-size:17px;font-weight:700;color:var(--ink)}
+  .blank .s{font-size:14px;line-height:1.65;color:var(--muted)}
+  .blank .glyph{font-size:30px;color:var(--line);margin-bottom:4px}
+  .err{color:var(--warn);font-weight:600}
+  .hide{display:none!important}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.3);
+        border-top-color:#fff;border-radius:50%;animation:sp .6s linear infinite;
+        vertical-align:-1px;margin-right:7px}
+  .stat .spin{border-color:var(--line);border-top-color:#2563eb}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  @media(max-width:920px){
+    .app{padding:0 12px 16px}
+    .qgrid{grid-template-columns:1fr}
+    .src{border-right:0;border-bottom:1px solid var(--line);border-radius:10px 10px 0 0}
+    .filters{border-radius:0}
+    .sheet{margin:0 8px}
+  }
+
+  /* ---- info content below the tool ---- */
+  .infoblock{max-width:900px;margin:6px auto 0;padding:8px 26px 20px;line-height:1.7}
+  .ib-h1{font-family:var(--serif);font-size:26px;color:var(--navy);margin:14px 0 6px;line-height:1.25}
+  .ib-lede{font-size:16px;color:var(--ink-2);margin:0 0 8px}
+  .infoblock h2{font-family:var(--serif);font-size:21px;color:var(--navy);
+                margin:28px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .infoblock h3{font-size:16px;color:var(--ink);margin:18px 0 4px}
+  .infoblock p{margin:0 0 12px;color:var(--ink)}
+  .infoblock ol,.infoblock ul{margin:0 0 14px;padding-left:22px}
+  .infoblock li{margin:0 0 7px}
+  .infoblock a{color:var(--navy-2);text-decoration:underline;text-underline-offset:2px}
+  .infoblock code{background:var(--well);padding:1px 5px;border-radius:3px;font-size:13px}
+  .ib-mr{font-size:14.5px;color:var(--ink-2);background:var(--well);
+         border-left:3px solid var(--navy-soft);padding:10px 14px;margin:0 0 14px;border-radius:0 4px 4px 0}
+  .ib-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;
+          color:var(--muted);display:block;margin-bottom:3px}
+  .ib-fields{width:100%;border-collapse:collapse;margin:4px 0 18px;font-size:14.5px}
+  .ib-fields th{background:var(--navy);color:#fff;text-align:left;padding:8px 12px;
+                font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .ib-fields td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .ib-fields tr:nth-child(even) td{background:var(--well)}
+  .ib-fields td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--navy);font-weight:600}
+  .adwrap{margin:22px 0;text-align:center;min-height:100px;background:var(--well);
+          border:1px solid var(--line);border-radius:8px;padding:10px;overflow:hidden}
+  .adtag{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;
+         letter-spacing:.1em;color:var(--muted);margin-bottom:6px;text-align:left}
+  .sitefoot{background:var(--navy);color:#cfe0f5;margin-top:36px;
+            display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+            gap:26px;padding:32px 26px 0}
+  .sitefoot .footbrand{font-family:var(--serif);font-size:18px;color:#fff;font-weight:700;margin-bottom:8px}
+  .sitefoot .foothead{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+                      letter-spacing:.1em;color:var(--navy-soft);margin-bottom:10px}
+  .sitefoot p{font-size:13.5px;line-height:1.6;margin:0 0 10px;max-width:34ch}
+  .sitefoot a{display:block;color:#cfe0f5;text-decoration:none;font-size:14px;padding:3px 0}
+  .sitefoot a:hover{color:#fff;text-decoration:underline}
+  .sitefoot .footbar{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.16);
+                     margin-top:22px;padding:16px 0;font-size:13px;color:var(--navy-soft);text-align:center}
+  .sitefoot .footbar b{color:#fff}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="masthead">
+    <span class="firm">Registry<span class="amp">Search</span></span>
+    <span class="tool">Registry Search</span>
+    <nav class="mastnav">
+      <a href="/" class="active">Search</a>
+      <a href="/guide.html">Guide</a>
+      <a href="/about.html">About IGR</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+    <span class="by">Files stay on your computer</span>
+  </header>
+
+  <!-- band 1 — files and filters -->
+  <section class="sheet">
+    <div class="qgrid">
+
+      <div class="src">
+        <div class="cap">Files <span class="n" id="filecount"></span></div>
+
+        <button type="button" class="drop" id="drop">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span class="big">Drop files or folders</span>
+          <span class="small">or click to pick files</span>
+        </button>
+        <input type="file" id="picker" class="hide" multiple
+               accept=".xls,.xlsx,.xlsm,.csv,.htm,.html">
+
+        <div class="chips" id="chips"></div>
+        <div style="margin-top:12px">
+          <button type="button" class="link hide" id="clearfiles">Clear all files</button>
+        </div>
+      </div>
+
+      <div class="filters">
+        <div class="cap">Filters
+          <span class="hint">every box is optional</span>
+          <button type="button" class="link n" id="clearfilters">Reset</button>
+        </div>
+
+        <div class="any">
+          <div class="field" style="margin:0">
+            <label for="_all">Search any column</label>
+            <input type="text" id="_all" placeholder="type a word, number or name">
+          </div>
+        </div>
+
+        <div class="fgrid" id="fgrid"></div>
+
+        <div class="shortcuts">
+          <div class="cap">Document type shortcuts
+            <span class="hint">one click fills the box above and searches</span>
+          </div>
+          <div class="sclist" id="sclist"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="searchbtn" disabled>Search</button>
+      <button class="ghost" id="exportbtn" type="button" disabled>Download CSV</button>
+      <span class="msg" id="selmsg"></span>
+    </div>
+  </section>
+
+  <!-- band 2 — results -->
+  <section class="sheet results">
+    <div class="bar">
+      <h2>Results</h2>
+      <span class="tally" id="tally">—</span>
+      <span class="stat" id="stat"></span>
+    </div>
+    <div class="flash hide" id="flash"></div>
+
+    <div class="blank" id="blank">
+      <div class="glyph">§</div>
+      <div class="t" id="blanktitle">Add files to begin</div>
+      <div class="s" id="blanksub">Drop the registry exports above. They are read in your browser and never uploaded anywhere. Leaving every filter empty returns every row.</div>
+    </div>
+
+    <div class="tablewrap hide" id="tablewrap">
+      <table><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+    </div>
+
+    <div class="pager hide" id="pager">
+      <button class="ghost" id="prev" type="button">‹ Previous</button>
+      <span id="pageinfo"></span>
+      <button class="ghost" id="next" type="button">Next ›</button>
+      <span style="margin-left:auto">Rows per page
+        <select id="size"><option>25</option><option selected>50</option>
+          <option>100</option><option>250</option></select></span>
+    </div>
+  </section>
+
+  <!-- content below the tool -->
+  <section class="infoblock">
+    <h1 class="ib-h1">Search Maharashtra Property-Registration (IGR) Records</h1>
+    <p class="ib-lede">Load the Excel exports from the Maharashtra registration
+      portal and search across all of them at once — by document number, type,
+      party name, or property description. Everything runs in your own browser:
+      the files are never uploaded to any server.</p>
+
+    <h2>What this tool is for</h2>
+    <p>The Department of Registration &amp; Stamps (IGR), Government of
+      Maharashtra, publishes an index of registered documents — sales, gifts,
+      releases, leases and more — through its public search service. That
+      service returns one search at a time as a downloadable spreadsheet. In
+      real title-search or due-diligence work you gather many such exports
+      across different areas, years and name spellings, and the questions that
+      matter cut across all of them at once: <em>where does this name appear as
+      a buyer or a seller, in any of these files?</em></p>
+    <p>Opening each spreadsheet by hand to answer that is slow. This tool loads
+      every export together and searches them as one set, returning matching
+      rows from all of them in a single table you can page through and download.
+      Files are read once when you add them, held only in your browser's memory,
+      and gone the moment you close or refresh the page.</p>
+    <div class="ib-mr"><span class="ib-lbl">मराठी सारांश</span>
+      हे साधन महाराष्ट्र नोंदणी विभागाच्या (IGR) निर्यात केलेल्या अनेक एक्सेल फायली
+      एकत्र उघडते आणि दस्त क्रमांक, दस्त प्रकार, पक्षकाराचे नाव किंवा मालमत्ता वर्णनानुसार
+      सर्व फायलींमध्ये एकाच वेळी शोध घेते. फायली तुमच्या संगणकावरच राहतात.</div>
+
+    <div class="adwrap"><span class="adtag">Advertisement</span>
+      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5876158560001890"
+        data-ad-format="auto" data-full-width-responsive="true"></ins>
+      <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script></div>
+
+    <h2>How to use it, step by step</h2>
+    <ol>
+      <li><b>Export from the IGR portal.</b> Run your search on the department's
+        public property-search service and download the result as a spreadsheet.
+        The file usually has an <code>.xls</code> name but is really an HTML
+        table in UTF-16 — this tool reads that directly, so you do not need to
+        convert it first.</li>
+      <li><b>Add the files.</b> Drag files or a whole folder onto the drop zone
+        at the top of this page, or click it to pick files. Each file is read
+        once as it is added; after that, searches are instant. Adding more files
+        later adds to the set rather than replacing it, and you can remove any
+        single file with the × beside its name.</li>
+      <li><b>Filter.</b> Every box is optional. Use <b>Search any column</b> for
+        a broad look, or the specific boxes — Document no, Document type, Seller,
+        Purchaser, Property contains. Seller and Purchaser match loosely,
+        ignoring spaces and braces, because the portal exports names run
+        together.</li>
+      <li><b>Read and export.</b> Matches appear in the table above, paged for
+        speed, with any-column matches highlighted. Download CSV saves the
+        current filtered set with Marathi text intact.</li>
+    </ol>
+
+    <h2>What the columns mean</h2>
+    <table class="ib-fields">
+      <tr><th>Column</th><th>What it holds</th></tr>
+      <tr><td>docno</td><td>Registration document number.</td></tr>
+      <tr><td>docname</td><td>Document type — sale, gift, release, lease, etc.</td></tr>
+      <tr><td>registrationdate</td><td>Date registered at the sub-registrar office.</td></tr>
+      <tr><td>sroname</td><td>The sub-registrar office (SRO).</td></tr>
+      <tr><td>sellerparty / purchaserparty</td><td>Names of the executing and claiming parties.</td></tr>
+      <tr><td>propertydescription</td><td>Survey/CTS number, building, area, flat and extents.</td></tr>
+    </table>
+
+    <h2>Common questions</h2>
+    <h3>Why does Excel warn when opening the export?</h3>
+    <p>Because the portal's <code>.xls</code> files are HTML tables in disguise,
+      saved in Unicode. That is normal. Load them into this tool as they came
+      off the portal — do not re-save them through another program, as that can
+      garble the Marathi text.</p>
+    <h3>A party name will not match — why?</h3>
+    <p>Names are often exported without spaces and inside braces. Use the Seller
+      or Purchaser boxes, which match loosely, and try a shorter fragment of the
+      name rather than the full string.</p>
+    <h3>Are my files uploaded anywhere?</h3>
+    <p>No. There is no server behind this tool. Your browser reads the files
+      directly off your own disk and holds the rows in memory for the life of
+      the page. Refreshing, closing the tab, or pressing <b>Clear all files</b>
+      discards them. See the <a href="/privacy.html">privacy policy</a> for detail.</p>
+
+    <p style="margin-top:22px">More detail is in the
+      <a href="/guide.html">full how-to guide</a> and the
+      <a href="/about.html">background on IGR and this tool</a>.</p>
+  </section>
+</div>
+
+<footer class="sitefoot">
+  <div class="footcol">
+    <div class="footbrand">RegistrySearch</div>
+    <p>A search tool for Maharashtra property-registration (IGR) records, built
+      to look across many registry exports at once.</p>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Pages</div>
+    <a href="/">Registry Search</a>
+    <a href="/guide.html">How-to Guide</a>
+    <a href="/about.html">About IGR &amp; This Tool</a>
+    <a href="/contact.html">Contact</a>
+    <a href="/privacy.html">Privacy Policy</a>
+  </div>
+  <div class="footcol">
+    <div class="foothead">Note</div>
+    <p>IGR registration records are public documents published by the Department
+      of Registration &amp; Stamps, Government of Maharashtra. This tool searches
+      exports of that public data, entirely inside your browser.</p>
+  </div>
+  <div class="footbar">RegistrySearch · search Maharashtra IGR records</div>
+</footer>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   CONFIG — edit this block only
+   ========================================================================= */
+
+// Safety limit on rows held for one search. There is no shared server here,
+// so this only guards your own tab. Raise it freely.
+const MAX_MATCHES = 50000;
+
+// Rows that appear identically in more than one file are kept by default.
+// Set to true to collapse them instead.
+const MERGE_DUPLICATES = false;
+
+// Adding files APPENDS to the current set. Set to true to go back to the old
+// behaviour where each new selection replaced the previous one.
+const REPLACE_ON_ADD = false;
+
+// Columns offered as filters, in the order they appear in the UI. Each is a
+// case-insensitive "contains" box.
+//   loose: true -> ignores spaces, quotes and braces when matching (good for
+//                  Marathi party names that are exported without spaces)
+const FILTERS = [
+  { col: "docno",               label: "Document no",       type: "text" },
+  { col: "docname",             label: "Document type",     type: "text", loose: true },
+  { col: "sellerparty",         label: "Seller",            type: "text", loose: true },
+  { col: "purchaserparty",      label: "Purchaser",         type: "text", loose: true },
+  { col: "propertydescription", label: "Property contains", type: "text", loose: true },
+];
+
+// Columns shown in the results table, in order. Leave empty to show everything.
+const DISPLAY_COLUMNS = [
+  "docno", "registrationdate", "docname", "areaname", "sroname",
+  "sellerparty", "purchaserparty", "propertydescription",
+];
+
+// One-click shortcut buttons under the filter grid. Each fills the Document
+// type box with its own term and searches — they are not combined with each
+// other. Clicking an active button again clears it. Add, remove or reorder
+// freely; the buttons are built from this list.
+const DOCTYPE_SHORTCUTS = [
+  "गहाणखत",
+  "मॉर्गेज",
+  "भाडेपट्टा",
+  "लिस",
+  "कन्व्हेयन्स",
+  "अभिहस्तांतरण पत्र",
+  "Agreement Relating to Deposit of Title Deeds,Pawn",
+  "सप्लीमेंट्री अँग्रीमेंट",
+  "पूरवणी करारनामा",
+];
+
+// Which filter box the shortcuts above fill.
+const SHORTCUT_COL = "docname";
+
+// Columns rendered with smaller, wrapping type.
+const PARTY_COLUMNS = new Set(["sellerparty", "purchaserparty"]);
+const PROP_COLUMNS  = new Set(["propertydescription"]);
+
+const FILE_EXTENSIONS = /\.(xls|xlsx|xlsm|csv|html?)$/i;
+
+// Reader for real .xlsx / OLE2 .xls workbooks. Loaded on demand, only if such
+// a file is actually added — the portal's own exports never need it.
+const SHEETJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+
+/* ============================================================================
+   Small helpers
+   ========================================================================= */
+
+const $ = id => document.getElementById(id);
+
+const LOOSE_RE = /[\s"'{}\[\]().,\-_/]/g;
+const loose = s => String(s == null ? "" : s).replace(LOOSE_RE, "").toLowerCase();
+const clean = s => (s == null ? "" : String(s).replace(/\s+/g, " ").trim());
+
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const cell = (row, i) => (i >= 0 && i < row.length ? row[i] : "");
+
+const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+/* ============================================================================
+   Decoding — the portal exports are UTF-16, not UTF-8
+   ========================================================================= */
+
+function decodeBuffer(buf) {
+  const head = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+  let enc = "utf-8";
+  if (head[0] === 0xff && head[1] === 0xfe) enc = "utf-16le";
+  else if (head[0] === 0xfe && head[1] === 0xff) enc = "utf-16be";
+  // TextDecoder strips the BOM for us.
+  return new TextDecoder(enc, { fatal: false }).decode(buf);
+}
+
+/* ============================================================================
+   Readers — each returns an array of row arrays
+   ========================================================================= */
+
+function parseHtmlTable(text) {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const out = [];
+  for (const tr of doc.querySelectorAll("tr")) {
+    const cells = [];
+    for (const c of tr.children) {
+      if (c.tagName === "TD" || c.tagName === "TH") cells.push(clean(c.textContent));
+    }
+    if (cells.length) out.push(cells);
+  }
+  return out;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", quoted = false, i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        quoted = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { quoted = true; i++; continue; }
+    if (c === ",")  { row.push(field); field = ""; i++; continue; }
+    if (c === "\r") { i++; continue; }
+    if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+    field += c; i++;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows.map(r => r.map(clean)).filter(r => r.length);
+}
+
+let sheetjsPromise = null;
+function loadSheetJS() {
+  if (sheetjsPromise) return sheetjsPromise;
+  sheetjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = SHEETJS_URL;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("could not load the workbook reader (needs internet)"));
+    document.head.appendChild(s);
+  });
+  return sheetjsPromise;
+}
+
+async function parseWorkbook(buf) {
+  await loadSheetJS();
+  const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+  return rows.map(r => r.map(clean)).filter(r => r.length);
+}
+
+/** Pick a reader by sniffing the first bytes, not by extension — the portal's
+ *  .xls files are really UTF-16 HTML tables. */
+async function readFileRows(file) {
+  const buf = await file.arrayBuffer();
+  const head = new Uint8Array(buf, 0, Math.min(8, buf.byteLength));
+  const is = (...b) => b.every((v, i) => head[i] === v);
+
+  if (is(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1)) return parseWorkbook(buf);  // OLE2 .xls
+  if (is(0x50, 0x4b)) return parseWorkbook(buf);                                      // PK -> .xlsx
+  const utf16 = (head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff);
+  if (/\.csv$/i.test(file.name) && !utf16) return parseCsv(decodeBuffer(buf));
+  return parseHtmlTable(decodeBuffer(buf));
+}
+
+/* ============================================================================
+   Cached file store — the whole state of the app lives here
+   ========================================================================= */
+
+// Each entry: { id, name, size, header: [...], rows: [[...]], error: string|null }
+let FILES = [];
+let nextId = 1;
+
+const okFiles  = () => FILES.filter(f => !f.error);
+const totalRows = () => okFiles().reduce((n, f) => n + f.rows.length, 0);
+
+/* ============================================================================
+   Filters compiled to per-file predicates
+   ========================================================================= */
+
+function build_predicates(params, header) {
+  const idx = {};
+  header.forEach((c, i) => { if (!(c in idx)) idx[c] = i; });
+  const preds = [];
+
+  const free = String(params._all || "").trim();
+  if (free) {
+    const n = loose(free);
+    preds.push(row => loose(row.join(" ")).includes(n));
+  }
+
+  for (const f of FILTERS) {
+    const i = idx[f.col];
+    if (i === undefined) continue;
+    if (f.type !== "text") continue;
+    const val = String(params[f.col] || "").trim();
+    if (!val) continue;
+    if (f.loose) {
+      const n = loose(val);
+      preds.push(row => loose(cell(row, i)).includes(n));
+    } else {
+      const n = val.toLowerCase();
+      preds.push(row => cell(row, i).toLowerCase().includes(n));
+    }
+  }
+  return preds;
+}
+
+/* ============================================================================
+   The search itself — over cached rows, no file is re-read
+   ========================================================================= */
+
+function run_search(params, dedupe, cap) {
+  cap = cap || MAX_MATCHES;
+  const matches = [], notes = [];
+  const seen = new Set();
+  let scanned = 0, truncated = false, columns = null;
+
+  for (const f of FILES) {
+    if (f.error) { notes.push({ file: f.name, rows: 0, ok: false, error: f.error }); continue; }
+
+    const header = f.header;
+    const keep = DISPLAY_COLUMNS.filter(c => header.includes(c));
+    if (columns === null) columns = keep.length ? keep : header.slice();
+    const take = columns.map(c => header.indexOf(c));
+    const preds = build_predicates(params, header);
+
+    for (const raw of f.rows) {
+      scanned++;
+      let hit = true;
+      for (const p of preds) { if (!p(raw)) { hit = false; break; } }
+      if (!hit) continue;
+
+      if (dedupe) {
+        const k = raw.join("\u0001");
+        if (seen.has(k)) continue;
+        seen.add(k);
+      }
+      if (matches.length >= cap) { truncated = true; break; }
+      matches.push(take.map(i => cell(raw, i)));
+    }
+
+    notes.push({ file: f.name, rows: f.rows.length, ok: true });
+    if (truncated) break;
+  }
+
+  return { columns: columns || [], matches, scanned, truncated, notes };
+}
+
+/* ============================================================================
+   Filter inputs, built from the CONFIG block
+   ========================================================================= */
+
+$("fgrid").innerHTML = FILTERS.map(f =>
+  `<div class="field"><label for="f_${esc(f.col)}">${esc(f.label)}</label>` +
+  `<input type="text" id="f_${esc(f.col)}" data-col="${esc(f.col)}"></div>`).join("");
+
+/* ---------- document-type shortcut buttons ---------- */
+
+const shortcutBox = () => $("f_" + SHORTCUT_COL);
+
+$("sclist").innerHTML = DOCTYPE_SHORTCUTS.map((t, i) =>
+  `<button type="button" class="sc" data-i="${i}" disabled>${esc(t)}</button>`).join("");
+
+function syncShortcuts() {
+  const box = shortcutBox();
+  const cur = box ? box.value.trim() : "";
+  document.querySelectorAll("#sclist .sc").forEach(b => {
+    b.classList.toggle("on", DOCTYPE_SHORTCUTS[Number(b.dataset.i)] === cur);
+  });
+}
+
+$("sclist").addEventListener("click", e => {
+  const b = e.target.closest("button.sc");
+  if (!b || b.disabled || busy) return;
+  const box = shortcutBox();
+  if (!box) return;
+  const term = DOCTYPE_SHORTCUTS[Number(b.dataset.i)];
+  box.value = (box.value.trim() === term) ? "" : term;   // click again to clear
+  syncShortcuts();
+  doSearch();
+});
+
+if (shortcutBox()) shortcutBox().addEventListener("input", syncShortcuts);
+
+/* ============================================================================
+   Adding, listing and removing files
+   ========================================================================= */
+
+let RESULTS = [], COLS = [], PAGE = 1, HILITE = "";
+let busy = false;
+
+function setMsg(t, bad, spinning) {
+  $("selmsg").innerHTML = (spinning ? '<span class="spin"></span>' : "") + esc(t);
+  $("selmsg").className = bad ? "msg err" : "msg";
+}
+
+function clearResults() {
+  RESULTS = []; COLS = []; PAGE = 1;
+  $("tablewrap").classList.add("hide");
+  $("pager").classList.add("hide");
+  $("flash").classList.add("hide");
+  $("tally").textContent = "—";
+  $("stat").textContent = "";
+  $("thead").innerHTML = "";
+  $("tbody").innerHTML = "";
+  $("blank").classList.remove("hide");
+}
+
+function renderChips() {
+  const n = FILES.length;
+  const good = okFiles().length;
+
+  $("filecount").textContent = n ? n + (n === 1 ? " file" : " files") : "";
+  $("chips").innerHTML = FILES.map(f =>
+    `<div class="chip${f.error ? " bad" : ""}">` +
+      `<span class="nm" title="${esc(f.error ? f.name + " — " + f.error : f.name)}">${esc(f.name)}</span>` +
+      `<em>${f.error ? "unreadable" : f.rows.length.toLocaleString() + " rows"}</em>` +
+      `<button type="button" class="x" data-id="${f.id}" title="Remove this file" aria-label="Remove ${esc(f.name)}">×</button>` +
+    `</div>`).join("");
+
+  $("clearfiles").classList.toggle("hide", n === 0);
+  $("searchbtn").disabled = busy || good === 0;
+  $("exportbtn").disabled = busy || good === 0;
+  document.querySelectorAll("#sclist .sc").forEach(b => { b.disabled = busy || good === 0; });
+
+  if (good) {
+    $("blanktitle").textContent = "Ready to search";
+    $("blanksub").textContent =
+      totalRows().toLocaleString() + " rows cached in this tab. Press Search — " +
+      "leaving every filter empty returns every row.";
+  } else {
+    $("blanktitle").textContent = "Add files to begin";
+    $("blanksub").textContent =
+      "Drop the registry exports above. They are read in your browser and never " +
+      "uploaded anywhere.";
+  }
+}
+
+async function addFiles(list) {
+  if (busy) return;
+  const usable = list.filter(f => FILE_EXTENSIONS.test(f.name) && !f.name.startsWith("~$"));
+  if (!usable.length) {
+    if (list.length) setMsg("no Excel or CSV files in that selection", true);
+    return;
+  }
+
+  if (REPLACE_ON_ADD) FILES = [];
+
+  busy = true;
+  $("searchbtn").disabled = true;
+  $("exportbtn").disabled = true;
+  clearResults();
+
+  let added = 0, skipped = 0, failed = 0;
+  for (let i = 0; i < usable.length; i++) {
+    const file = usable[i];
+
+    if (FILES.some(f => f.name === file.name && f.size === file.size)) { skipped++; continue; }
+
+    setMsg(`reading ${i + 1} of ${usable.length} — ${file.name}`, false, true);
+    await nextFrame();
+
+    const entry = { id: nextId++, name: file.name, size: file.size, header: [], rows: [], error: null };
+    try {
+      const rows = await readFileRows(file);
+      if (!rows.length) throw new Error("no rows found");
+      entry.header = rows[0].map(c => c.trim().toLowerCase());
+      entry.rows = rows.slice(1);
+      added++;
+    } catch (e) {
+      entry.error = (e && e.message) ? e.message : String(e);
+      failed++;
+    }
+    FILES.push(entry);
+    renderChips();
+  }
+
+  busy = false;
+  renderChips();
+  $("picker").value = "";
+
+  const bits = [];
+  if (added)   bits.push(added + " file(s) ready, " + totalRows().toLocaleString() + " rows cached");
+  if (skipped) bits.push(skipped + " already added");
+  if (failed)  bits.push(failed + " unreadable");
+  setMsg(bits.join(" · ") || "nothing added", failed > 0 && added === 0);
+}
+
+function removeFile(id) {
+  if (busy) return;
+  FILES = FILES.filter(f => f.id !== id);
+  clearResults();
+  renderChips();
+  setMsg(FILES.length
+    ? "file removed — " + totalRows().toLocaleString() + " rows still cached"
+    : "all files removed", false);
+}
+
+$("chips").addEventListener("click", e => {
+  const btn = e.target.closest("button.x");
+  if (btn) removeFile(Number(btn.dataset.id));
+});
+
+$("clearfiles").onclick = () => {
+  if (busy) return;
+  FILES = [];
+  clearResults();
+  renderChips();
+  setMsg("cleared — nothing is left in memory", false);
+};
+
+/* ---------- drop zone ---------- */
+
+$("drop").onclick = () => { if (!busy) $("picker").click(); };
+$("picker").onchange = e => addFiles([...e.target.files]);
+
+["dragenter", "dragover"].forEach(ev => $("drop").addEventListener(ev, e => {
+  e.preventDefault(); $("drop").classList.add("over");
+}));
+["dragleave", "drop"].forEach(ev => $("drop").addEventListener(ev, e => {
+  e.preventDefault(); $("drop").classList.remove("over");
+}));
+
+$("drop").addEventListener("drop", async e => {
+  if (busy) return;
+  const items = [...(e.dataTransfer.items || [])];
+  const entries = items.map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) {
+    setMsg("reading folder…", false, true);
+    const files = [];
+    for (const en of entries) await walk(en, files);
+    addFiles(files);
+  } else {
+    addFiles([...e.dataTransfer.files]);
+  }
+});
+
+function walk(entry, out) {
+  return new Promise(res => {
+    if (entry.isFile) return entry.file(f => { out.push(f); res(); }, res);
+    const rd = entry.createReader();
+    const readMore = () => rd.readEntries(async batch => {
+      if (!batch.length) return res();
+      for (const e of batch) await walk(e, out);
+      readMore();
+    }, res);
+    readMore();
+  });
+}
+
+/* ============================================================================
+   Filters
+   ========================================================================= */
+
+function collect() {
+  const p = {};
+  const free = $("_all").value.trim();
+  if (free) p._all = free;
+  document.querySelectorAll(".fgrid [data-col]").forEach(el => {
+    if (el.value.trim()) p[el.dataset.col] = el.value.trim();
+  });
+  return p;
+}
+
+$("clearfilters").onclick = () => {
+  $("_all").value = "";
+  document.querySelectorAll(".fgrid [data-col]").forEach(el => { el.value = ""; });
+  syncShortcuts();
+};
+
+/* ============================================================================
+   Search
+   ========================================================================= */
+
+$("searchbtn").onclick = doSearch;
+$("size").onchange = () => showPage(1);
+$("prev").onclick = () => showPage(PAGE - 1);
+$("next").onclick = () => showPage(PAGE + 1);
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !$("searchbtn").disabled) doSearch();
+});
+
+async function doSearch() {
+  if (busy) return;
+  busy = true;
+  $("searchbtn").disabled = true;
+  $("stat").innerHTML = '<span class="spin"></span>searching ' + okFiles().length + ' file(s)…';
+  $("flash").classList.add("hide");
+  await nextFrame();
+
+  const t0 = performance.now();
+  try {
+    const out = run_search(collect(), MERGE_DUPLICATES, MAX_MATCHES);
+
+    RESULTS = out.matches;
+    COLS = out.columns;
+    HILITE = $("_all").value.trim();
+
+    $("tally").innerHTML = "<b>" + RESULTS.length.toLocaleString() + "</b> <span>" +
+      (RESULTS.length === 1 ? "row" : "rows") + "</span>";
+    $("stat").textContent = okFiles().length + " files · " + out.scanned.toLocaleString() +
+      " scanned · " + ((performance.now() - t0) / 1000).toFixed(2) + "s";
+
+    const bad = out.notes.filter(n => !n.ok);
+    const msgs = [];
+    if (out.truncated) msgs.push("Stopped at the first " + MAX_MATCHES.toLocaleString() +
+      " matches — narrow the filters to see the rest.");
+    if (bad.length) msgs.push(bad.length + " file(s) unreadable: " +
+      bad.map(n => esc(n.file)).join(", "));
+    $("flash").classList.toggle("hide", !msgs.length);
+    $("flash").innerHTML = msgs.join(" ");
+
+    showPage(1);
+  } catch (e) {
+    $("stat").innerHTML = '<span class="err">' + esc(e.message || String(e)) + "</span>";
+  }
+  busy = false;
+  renderChips();
+}
+
+function mark(html) {
+  if (!HILITE) return html;
+  try {
+    const re = new RegExp("(" + HILITE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+    return html.replace(re, "<mark>$1</mark>");
+  } catch { return html; }
+}
+
+function showPage(page) {
+  const size = parseInt($("size").value, 10);
+  const pages = Math.max(1, Math.ceil(RESULTS.length / size));
+  PAGE = Math.min(Math.max(1, page), pages);
+
+  const has = RESULTS.length > 0;
+  $("tablewrap").classList.toggle("hide", !has);
+  $("pager").classList.toggle("hide", !has);
+  $("blank").classList.toggle("hide", has);
+  if (!has) {
+    $("blanktitle").textContent = "No rows matched";
+    $("blanksub").textContent = "Clear or widen a filter and search again.";
+    return;
+  }
+
+  $("thead").innerHTML =
+    "<colgroup>" + COLS.map(c => `<col class="c-${esc(c)}">`).join("") + "</colgroup>" +
+    "<tr>" + COLS.map(c => `<th>${esc(c.replace(/_/g, " "))}</th>`).join("") + "</tr>";
+
+  $("tbody").innerHTML = RESULTS.slice((PAGE - 1) * size, PAGE * size).map(row =>
+    "<tr>" + row.map((val, i) => {
+      const c = COLS[i];
+      const cls = PARTY_COLUMNS.has(c) ? "party" : PROP_COLUMNS.has(c) ? "prop" : "";
+      return `<td class="${cls}">${mark(esc(val))}</td>`;
+    }).join("") + "</tr>").join("");
+
+  const from = (PAGE - 1) * size + 1, to = Math.min(PAGE * size, RESULTS.length);
+  $("pageinfo").innerHTML = `<b>${from}–${to}</b> of <b>${RESULTS.length.toLocaleString()}</b>`;
+  $("prev").disabled = PAGE <= 1;
+  $("next").disabled = to >= RESULTS.length;
+  window.scrollTo({ top: $("tablewrap").getBoundingClientRect().top + window.scrollY - 12, behavior: "smooth" });
+}
+
+/* ============================================================================
+   Export — the full filtered set, not just what is on screen
+   ========================================================================= */
+
+function csvQuote(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+$("exportbtn").onclick = async () => {
+  if (busy) return;
+  busy = true;
+  $("exportbtn").disabled = true;
+  const was = $("stat").innerHTML;
+  $("stat").innerHTML = '<span class="spin"></span>building CSV…';
+  await nextFrame();
+
+  try {
+    // Uncapped on purpose: the on-screen table is paged, the download is not.
+    const out = run_search(collect(), MERGE_DUPLICATES, Infinity);
+    const lines = [out.columns.map(csvQuote).join(",")];
+    for (const row of out.matches) lines.push(row.map(csvQuote).join(","));
+
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `results-${stamp}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+    $("stat").innerHTML = was;
+  } catch (e) {
+    $("stat").innerHTML = '<span class="err">' + esc(e.message || String(e)) + "</span>";
+  }
+  busy = false;
+  renderChips();
+};
+
+/* ============================================================================
+   Start
+   ========================================================================= */
+
+renderChips();
+syncShortcuts();
+setMsg("", false);
+</script>
+</body>
+</html>
